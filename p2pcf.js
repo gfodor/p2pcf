@@ -7,6 +7,15 @@
 const getBrowserRTC = require('get-browser-rtc')
 const EventEmitter = require('events')
 const debug = require('debug')('p2pcf')
+const pako = require('pako')
+const secureRandom = require('secure-random')
+const { encode: arrayBufferToBase64 } = require('base64-arraybuffer')
+const { bytesToHex, hexToBytes } = require('convert-hex')
+const { createSdp } = require('./utils')
+const randomstring = require('randomstring')
+
+const randomHex = c => bytesToHex(secureRandom(c))
+const hexToBase64 = hex => arrayBufferToBase64(hexToBytes(hex))
 
 const MAX_MESSAGE_LENGTH_BYTES = 16000
 
@@ -63,7 +72,10 @@ const DEFAULT_TURN_ICE = [
 const ua = (global.window && global.window.navigator.userAgent) || ''
 const iOS = !!ua.match(/iPad/i) || !!ua.match(/iPhone/i)
 const webkit = !!ua.match(/WebKit/i)
-const iOSSafari = iOS && webkit && !ua.match(/CriOS/i)
+const iOSSafari = !!(iOS && webkit && !ua.match(/CriOS/i))
+const isFirefox = !!(
+  global.navigator?.userAgent.toLowerCase().indexOf('firefox') > -1
+)
 
 // parseCandidate from https://github.com/fippo/sdp
 const parseCandidate = line => {
@@ -110,22 +122,30 @@ const parseCandidate = line => {
 }
 
 class P2PCF extends EventEmitter {
-  constructor (identifier = '', options = {}) {
+  constructor (clientId = '', roomId = '', options = {}) {
     super()
 
-    if (!identifier || identifier.length < 4) {
-      throw new Error('Identifier must be at least four characters')
+    if (!clientId || clientId.length < 4) {
+      throw new Error('Client ID must be at least four characters')
+    }
+
+    if (!roomId || roomId.length < 4) {
+      throw new Error('Room ID must be at least four characters')
     }
 
     this.peers = new Map()
     this.msgChunks = new Map()
     this.responseWaiting = new Map()
     this.connectedClients = []
-    this.identifier = identifier
+    this.clientId = clientId
+    this.roomId = roomId
     this.packages = []
     this.dataTimestamp = null
     this.lastPackages = null
     this.packageReceivedFromPeers = new Set()
+    this.lastReceivedDataTimestamps = new Map()
+    this.packageReceivedFromPeers = new Set()
+
     this.workerUrl =
       options.workerUrl || 'https://signaling.minddrop.workers.dev'
 
@@ -138,8 +158,34 @@ class P2PCF extends EventEmitter {
     this.networkChangePollIntervalMs =
       options.networkChangePollIntervalMs || 15000
 
+    this.stateExpirationIntervalMs =
+      options.stateExpirationIntervalMs || 2 * 60 * 1000
+    this.stateHeartbeatWindowMs = options.stateHeartbeatWindowMs || 30000
+
+    this.fastPollingDurationMs = options.fastPollingDurationMs || 10000
+    this.fastPollingRateMs = options.fastPollingRateMs || 750
+    this.slowPollingRateMs = options.slowPollingRateMs || 5000
+
     this.wrtc = getBrowserRTC()
     this.dtlsCert = null
+    this.udpEnabled = null
+    this.isSymmetric = null
+    this.reflexiveIps = null
+    this.dtlsFingerprint = null
+
+    // ContextID is maintained across page refreshes
+    if (global.history) {
+      if (!global.history.state?._p2pcfContextId) {
+        global.history.replaceState(
+          { ...global.history.state, _p2pcfContextId: randomHex(20) },
+          global.window.location.href
+        )
+      }
+
+      this.contextId = global.history.state.contextId
+    } else {
+      this.contextId = randomHex(20)
+    }
   }
 
   async _init () {
@@ -155,22 +201,624 @@ class P2PCF extends EventEmitter {
   }
 
   _step = (function () {
-    return async () => {
-      console.log('hello')
+    const startedTimestamp = new Date().getTime()
+
+    let isSending = false
+    let finished = false
+    let nextStepTime = -1
+    let deleteKey = null
+    let sentFirstPoll = false
+    let stopFastPollingAt = -1
+
+    return async (finish = false) => {
+      const {
+        clientId,
+        roomId,
+        contextId,
+        stateExpirationIntervalMs,
+        stateHeartbeatWindowMs,
+        packages,
+        fastPollingDurationMs,
+        fastPollingRateMs,
+        slowPollingRateMs
+      } = this
+
+      const now = new Date().getTime()
+
+      if (finish) {
+        if (finished) return
+        finished = true
+      } else {
+        if (nextStepTime > now) return
+        if (isSending) return
+        if (this.reflexiveIps.length === 0) return
+      }
+
+      isSending = true
+
+      try {
+        const localDtlsFingerprintBase64 = hexToBase64(
+          this.dtlsFingerprint.replaceAll(':', '')
+        )
+
+        const localPeerInfo = [
+          clientId,
+          this.isSymmetric,
+          localDtlsFingerprintBase64,
+          startedTimestamp,
+          [...this.reflexiveIps]
+        ]
+
+        const payload = { r: roomId, k: contextId }
+
+        if (finish) {
+          payload.dk = deleteKey
+        }
+
+        const expired =
+          this.dataTimestamp === null ||
+          now - this.dataTimestamp >=
+            stateExpirationIntervalMs - stateHeartbeatWindowMs
+
+        const packagesChanged = this.lastPackages !== JSON.stringify(packages)
+        let includePackages = false
+
+        if (expired || packagesChanged || finish) {
+          // This will force a write
+          this.dataTimestamp = now
+
+          // Compact packages, expire any of them sent more than a minute ago.
+          // (ICE will timeout by then, even if other latency fails us.)
+          for (let i = 0; i < packages.length; i++) {
+            const sentAt = packages[i][packages[i].length - 2]
+
+            if (now - sentAt > 60 * 1000) {
+              packages[i] = null
+            }
+          }
+
+          while (packages.indexOf(null) >= 0) {
+            packages.splice(packages.indexOf(null), 1)
+          }
+
+          includePackages = true
+        }
+
+        if (finish) {
+          includePackages = false
+        }
+
+        // The first poll should just be a read, no writes, to build up packages before we do a write
+        // to reduce worker I/O. So don't include the data + packages on the first request.
+        if (sentFirstPoll) {
+          payload.d = localPeerInfo
+          payload.t = this.dataTimestamp
+          payload.x = this.stateExpirationIntervalMs
+
+          if (includePackages) {
+            payload.p = packages
+            this.lastPackages = JSON.stringify(packages)
+          }
+        }
+
+        let body = JSON.stringify(payload)
+        const deflatedBody = arrayBufferToBase64(pako.deflate(body))
+        const headers = { 'Content-Type': 'application/json ' }
+        let keepalive = false
+
+        if (body.length > deflatedBody.length) {
+          body = deflatedBody
+          headers['Content-Type'] = 'application/json'
+          headers['Content-Encoding'] = 'text/plain'
+          headers['Content-Length'] = deflatedBody.length
+        }
+
+        if (finish) {
+          headers['X-Worker-Method'] = 'DELETE'
+          keepalive = true
+        }
+
+        const res = await fetch(this.workerUrl, {
+          method: 'POST',
+          headers,
+          body,
+          keepalive
+        })
+
+        const { ps: remotePeerDatas, pk: remotePackages, dk } = await res.json()
+
+        if (dk) {
+          deleteKey = dk
+        }
+
+        if (finish) return
+
+        // Slight optimization: if the peers are empty on the first poll, immediately publish data to reduce
+        // delay before first peers show up.
+        if (remotePeerDatas.length === 0 && !sentFirstPoll) {
+          payload.d = localPeerInfo
+          payload.t = this.dataTimestamp
+          payload.x = this.stateExpirationIntervalMs
+          payload.p = packages
+          this.lastPackages = JSON.stringify(packages)
+
+          const res = await fetch(this.workerUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          })
+
+          const { dk } = await res.json()
+
+          if (dk) {
+            deleteKey = dk
+          }
+        }
+
+        sentFirstPoll = true
+
+        const previousPeerClientIds = [...this.peers.keys()]
+
+        this._handleWorkerResponse(
+          startedTimestamp,
+          localPeerInfo,
+          localDtlsFingerprintBase64,
+          packages,
+          remotePeerDatas,
+          remotePackages
+        )
+
+        const activeClientIds = remotePeerDatas.map(p => p[0])
+
+        const peersChanged =
+          previousPeerClientIds.length !== activeClientIds.length ||
+          activeClientIds.find(c => !previousPeerClientIds.includes(c)) ||
+          previousPeerClientIds.find(c => !activeClientIds.includes(c))
+
+        // Rate limit requests when room is empty, or look for new joins
+        // Go faster when things are changing to avoid ICE timeouts
+        if (peersChanged) {
+          stopFastPollingAt = now + fastPollingDurationMs
+        }
+
+        if (now < stopFastPollingAt) {
+          nextStepTime = now + fastPollingRateMs
+        } else {
+          nextStepTime = now + slowPollingRateMs
+        }
+      } catch (e) {
+        console.error(e)
+        nextStepTime = now + slowPollingRateMs
+      } finally {
+        isSending = false
+      }
     }
   })()
+
+  _handleWorkerResponse (
+    localStartedAtTimestamp,
+    localPeerData,
+    localDtlsFingerprintBase64,
+    localPackages,
+    remotePeerDatas,
+    remotePackages
+  ) {
+    const {
+      dtlsCert: localDtlsCert,
+      peers,
+      lastReceivedDataTimestamps,
+      packageReceivedFromPeers,
+      stunIceServers,
+      turnIceServers,
+      wrtc
+    } = this
+    const [localClientId, localSymmetric] = localPeerData
+    const now = new Date().getTime()
+
+    for (const remotePeerData of remotePeerDatas) {
+      const [
+        remoteClientId,
+        remoteSymmetric,
+        remoteDtlsFingerprintBase64,
+        remoteJoinedAtTimestamp,
+        remoteReflexiveIps,
+        remoteDataTimestamp
+      ] = remotePeerData
+
+      // Don't process the same messages twice. This covers disconnect cases where stale data re-creates a peer too early.
+      if (
+        lastReceivedDataTimestamps.get(remoteClientId) === remoteDataTimestamp
+      ) {
+        continue
+      }
+
+      lastReceivedDataTimestamps.set(remoteClientId, remoteDataTimestamp)
+
+      // Peer A is:
+      //   - if both not symmetric or both symmetric, whoever has the most recent data is peer A, since we want Peer B created faster,
+      //     and latency will be lowest with older data.
+      //   - if one is and one isn't, the non symmetric one is the only one who has valid candidates, so the symmetric one is peer A
+      const isPeerA =
+        localSymmetric === remoteSymmetric
+          ? localStartedAtTimestamp > remoteJoinedAtTimestamp
+          : localSymmetric
+
+      // If either side is symmetric, use TURN and hope we avoid connecting via relays
+      // We can't just use TURN if both sides are symmetric because one side might be port restricted and hence won't connect without a relay.
+      const iceServers =
+        localSymmetric || remoteSymmetric ? turnIceServers : stunIceServers
+
+      // Firefox answer side is very aggressive with ICE timeouts, so always delay answer set until second candidates received.
+      const delaySetRemoteUntilReceiveCandidates = isFirefox
+      const remotePackage = remotePackages.find(p => p[1] === remoteClientId)
+
+      const peerOptions = { iceServers }
+
+      if (localDtlsCert) {
+        peerOptions.certificates = [localDtlsCert]
+      }
+
+      if (isPeerA) {
+        if (peers.has(remoteClientId)) continue
+        if (!remotePackage) continue
+
+        // If we already added the candidates from B, skip. This check is not strictly necessary given the peer will exist.
+        if (packageReceivedFromPeers.has(remoteClientId)) continue
+        packageReceivedFromPeers.add(remoteClientId)
+
+        //  - I create PC
+        //  - I create an answer SDP, and munge the ufrag
+        //  - Set local description with answer
+        //  - Set remote description via the received sdp
+        //  - Add the ice candidates
+
+        const [
+          ,
+          ,
+          remoteIceUFrag,
+          remoteIcePwd,
+          remoteDtlsFingerprintBase64,
+          localIceUFrag,
+          localIcePwd,
+          ,
+          remoteCandidates
+        ] = remotePackage
+
+        const pc = new wrtc.RTCPeerConnection(peerOptions)
+        pc.createDataChannel('p2pcf_signalling')
+        peers.set(remoteClientId, pc)
+
+        // Special case if both behind sym NAT or other hole punching isn't working: peer A needs to send its candidates as well.
+        const pkg = [
+          remoteClientId,
+          localClientId,
+          /* lfrag */ null,
+          /* lpwd */ null,
+          /* ldtls */ null,
+          /* remote ufrag */ null,
+          /* remote Pwd */ null,
+          now,
+          []
+        ]
+        const pkgCandidates = pkg[pkg.length - 1]
+
+        pc.onicecandidate = e => {
+          if (!e.candidate) {
+            if (pkgCandidates.length > 0) {
+              // If hole punch hasn't worked after two seconds, send these candidates back to B to help it punch through.
+              localPackages.push(pkg)
+            }
+
+            return
+          }
+
+          if (!e.candidate.candidate) return
+          pkgCandidates.push(e.candidate.candidate)
+        }
+
+        pc.oniceconnectionstatechange = () => {
+          const iceConnectionState = pc.iceConnectionState
+          const iceGatheringState = pc.iceGatheringState
+
+          if (iceConnectionState === 'connected') {
+            console.log('connected')
+          } else if (iceConnectionState === 'failed') {
+            this._removePeerByClientId(remoteClientId)
+          }
+
+          console.log(
+            'iceconnectionstatechange',
+            remoteClientId.substring(0, 5),
+            iceConnectionState,
+            iceGatheringState
+          )
+        }
+
+        pc.onicegatheringstatechange = () => {
+          const iceConnectionState = pc.iceConnectionState
+          const iceGatheringState = pc.iceGatheringState
+          console.log(
+            'icegatheringstatechange',
+            remoteClientId.substring(0, 5),
+            iceConnectionState,
+            iceGatheringState
+          )
+        }
+
+        pc.onconnectionstatechange = () => {
+          const connectionState = pc.connectionState
+          console.log(
+            'connectionstatechange',
+            remoteClientId.substring(0, 5),
+            connectionState
+          )
+
+          if (connectionState === 'connected') {
+            console.log('connected2')
+          } else if (connectionState === 'failed') {
+            this._removePeerByClientId(remoteClientId)
+          } else {
+            document
+              .getElementById(`${remoteClientId}-conn-status`)
+              .setAttribute(
+                'style',
+                'width: 32px; height: 32px; background-color: yellow;'
+              )
+          }
+        }
+
+        pc.onsignalingstatechange = () => {
+          const signalingState = pc.signalingState
+          console.log(
+            'signalingstatechange',
+            remoteClientId.substring(0, 5),
+            signalingState
+          )
+        }
+
+        const remoteSdp = createSdp(
+          true,
+          remoteIceUFrag,
+          remoteIcePwd,
+          remoteDtlsFingerprintBase64
+        )
+
+        pc.setRemoteDescription({ type: 'offer', sdp: remoteSdp })
+
+        pc.createAnswer().then(answer => {
+          const lines = []
+
+          for (const l of answer.sdp.split('\r\n')) {
+            if (l.startsWith('a=ice-ufrag')) {
+              lines.push(`a=ice-ufrag:${localIceUFrag}`)
+            } else if (l.startsWith('a=ice-pwd')) {
+              lines.push(`a=ice-pwd:${localIcePwd}`)
+            } else {
+              lines.push(l)
+            }
+          }
+
+          pc.setLocalDescription({ type: 'answer', sdp: lines.join('\r\n') })
+
+          console.log('Add remote candidates', remoteClientId)
+
+          for (const candidate of remoteCandidates) {
+            pc.addIceCandidate({ candidate, sdpMLineIndex: 0 })
+          }
+        })
+      } else {
+        // I am peer B, I need to create a peer first if none exists, and send a package.
+        //   - Create PC
+        //   - Create offer
+        //   - Set local description as-is
+        //   - Generate ufrag + pwd
+        //   - Generate remote SDP using the dtls fingerprint for A, and my generated ufrag + pwd
+        //   - Add an srflx candidate for each of the reflexive IPs for A (on a random port) to hole punch
+        //   - Set remote description
+        //     so peer reflexive candidates for it show up.
+        //   - Let trickle run, then once trickle finishes send a package for A to pick up = [my client id, my offer sdp, generated ufrag/pwd, dtls fingerprint, ice candidates]
+        //   - keep the icecandidate listener active, and add the pfrlx candidates when they arrive (but don't send another package)
+        if (!peers.has(remoteClientId)) {
+          const pc = new wrtc.RTCPeerConnection(peerOptions)
+          pc.createDataChannel('p2pcf_signalling')
+          peers.set(remoteClientId, pc)
+
+          const remoteUfrag = randomstring.generate({ length: 12 })
+          const remotePwd = randomstring.generate({ length: 32 })
+
+          // This is the 'package' sent to peer A that it needs to start ICE
+          const pkg = [
+            remoteClientId,
+            localClientId,
+            /* lfrag */ null,
+            /* lpwd */ null,
+            /* ldtls */ null,
+            remoteUfrag,
+            remotePwd,
+            now,
+            []
+          ]
+
+          const pkgCandidates = pkg[pkg.length - 1]
+
+          // Peer A posted its reflexive IPs to try to speed up hole punching by B.
+          let remoteSdp = createSdp(
+            false,
+            remoteUfrag,
+            remotePwd,
+            remoteDtlsFingerprintBase64
+          )
+
+          for (let i = 0; i < remoteReflexiveIps.length; i++) {
+            remoteSdp += `a=candidate:0 1 udp ${i + 1} ${
+              remoteReflexiveIps[i]
+            } 30000 typ srflx\r\n`
+          }
+
+          pc.onicecandidate = e => {
+            // Push package onto the given package list, so it will be sent in next polling step.
+            if (!e.candidate) return localPackages.push(pkg)
+
+            if (!e.candidate.candidate) return
+            pkgCandidates.push(e.candidate.candidate)
+          }
+
+          pc.oniceconnectionstatechange = () => {
+            const iceConnectionState = pc.iceConnectionState
+            const iceGatheringState = pc.iceGatheringState
+
+            if (iceConnectionState === 'connected') {
+              console.log('connected B')
+            } else if (iceConnectionState === 'failed') {
+              this._removePeerByClientId(remoteClientId)
+            }
+
+            console.log(
+              'iceconnectionstatechange',
+              remoteClientId.substring(0, 5),
+              iceConnectionState,
+              iceGatheringState
+            )
+          }
+
+          pc.onicegatheringstatechange = () => {
+            const iceConnectionState = pc.iceConnectionState
+            const iceGatheringState = pc.iceGatheringState
+            console.log(
+              'icegatheringstatechange',
+              remoteClientId.substring(0, 5),
+              iceConnectionState,
+              iceGatheringState
+            )
+          }
+
+          pc.onconnectionstatechange = () => {
+            const connectionState = pc.connectionState
+            console.log(
+              'connectionstatechange',
+              remoteClientId.substring(0, 5),
+              connectionState
+            )
+
+            if (connectionState === 'connected') {
+              console.log('connected2 B')
+            } else if (connectionState === 'failed') {
+              this._removePeerByClientId(remoteClientId)
+            }
+          }
+
+          pc.onsignalingstatechange = () => {
+            const signalingState = pc.signalingState
+            console.log(
+              'signalingstatechange',
+              remoteClientId.substring(0, 5),
+              signalingState
+            )
+          }
+
+          pc.createOffer().then(offer => {
+            pc.setLocalDescription(offer)
+
+            for (const l of offer.sdp.split('\r\n')) {
+              switch (l.split(':')[0]) {
+                case 'a=ice-ufrag':
+                  pkg[2] = l.substring(12)
+                  break
+                case 'a=ice-pwd':
+                  pkg[3] = l.substring(10)
+                  break
+                case 'a=fingerprint':
+                  pkg[4] = hexToBase64(l.substring(22).replaceAll(':', ''))
+                  break
+              }
+            }
+
+            if (!delaySetRemoteUntilReceiveCandidates) {
+              pc.setRemoteDescription({ type: 'answer', sdp: remoteSdp })
+            } else {
+              pc._pendingRemoteSdp = remoteSdp
+            }
+          })
+        }
+
+        if (!remotePackage) continue
+
+        // Peer B will also receive candidates in the case where hole punch fails.
+        // If we already added the candidates from A, skip
+        const [, , , , , , , , remoteCandidates] = remotePackage
+        if (packageReceivedFromPeers.has(remoteClientId)) continue
+        if (!peers.has(remoteClientId)) continue
+
+        const pc = peers.get(remoteClientId)
+        if (
+          delaySetRemoteUntilReceiveCandidates &&
+          !pc.remoteDescription &&
+          pc._pendingRemoteSdp
+        ) {
+          console.log('Add remote candidates', remoteClientId)
+
+          pc.setRemoteDescription({
+            type: 'answer',
+            sdp: pc._pendingRemoteSdp
+          }).then(() => {
+            delete pc._pendingRemoteSdp
+
+            if (pc.iceConnectionState !== 'connected') {
+              for (const candidate of remoteCandidates) {
+                pc.addIceCandidate({ candidate, sdpMLineIndex: 0 })
+              }
+            }
+
+            packageReceivedFromPeers.add(remoteClientId)
+          })
+
+          packageReceivedFromPeers.add(remoteClientId)
+        }
+
+        if (
+          !delaySetRemoteUntilReceiveCandidates &&
+          pc.remoteDescription &&
+          remoteCandidates.length > 0
+        ) {
+          console.log('Add remote candidates', remoteClientId)
+
+          if (pc.iceConnectionState !== 'connected') {
+            for (const candidate of remoteCandidates) {
+              pc.addIceCandidate({ candidate, sdpMLineIndex: 0 })
+            }
+          }
+
+          packageReceivedFromPeers.add(remoteClientId)
+        }
+      }
+    }
+
+    const remoteClientIds = remotePeerDatas.map(p => p[0])
+
+    // Remove all peers no longer in the peer list.
+    for (const clientId of peers.keys()) {
+      if (remoteClientIds.includes(clientId)) continue
+      this._removePeerByClientId(clientId)
+    }
+  }
 
   /**
    * Connect to network and start discovering peers
    */
   async start () {
     await this._init()
-    let [
+
+    const [
       udpEnabled,
       isSymmetric,
       reflexiveIps,
       dtlsFingerprint
     ] = await this._getNetworkSettings(this.dtlsCert)
+
+    this.udpEnabled = udpEnabled
+    this.isSymmetric = isSymmetric
+    this.reflexiveIps = reflexiveIps
+    this.dtlsFingerprint = dtlsFingerprint
 
     this.networkSettingsInterval = setInterval(async () => {
       const [
@@ -181,10 +829,10 @@ class P2PCF extends EventEmitter {
       ] = await this._getNetworkSettings(this.dtlsCert)
 
       if (
-        newUdpEnabled !== udpEnabled ||
-        newIsSymmetric !== isSymmetric ||
-        newDtlsFingerprint !== dtlsFingerprint ||
-        [...reflexiveIps].join(' ') !== [...newReflexiveIps].join(' ')
+        newUdpEnabled !== this.udpEnabled ||
+        newIsSymmetric !== this.isSymmetric ||
+        newDtlsFingerprint !== this.dtlsFingerprint ||
+        [...this.reflexiveIps].join(' ') !== [...newReflexiveIps].join(' ')
       ) {
         // Network reset, clear all peers
         this.packages.length = 0
@@ -195,10 +843,10 @@ class P2PCF extends EventEmitter {
 
         this.dataTimestamp = null
         this.lastPackages = null
-        udpEnabled = newUdpEnabled
-        isSymmetric = newIsSymmetric
-        reflexiveIps = newReflexiveIps
-        dtlsFingerprint = newDtlsFingerprint
+        this.udpEnabled = newUdpEnabled
+        this.isSymmetric = newIsSymmetric
+        this.reflexiveIps = newReflexiveIps
+        this.dtlsFingerprint = newDtlsFingerprint
       }
     }, this.networkChangePollIntervalMs)
 

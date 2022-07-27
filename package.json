@@ -15,8 +15,11 @@
     "test": "standard && start-server-and-test 'node start-trackers.js' 5001 test:all"
   },
   "dependencies": {
+    "base64-arraybuffer": "^1.0.2",
+    "convert-hex": "^0.1.0",
     "debug": "^4.3.4",
-    "pako": "^2.0.4"
+    "pako": "^2.0.4",
+    "randomstring": "^1.2.2"
   },
   "optionalDependencies": {
     "wrtc": "^0.4.6"
