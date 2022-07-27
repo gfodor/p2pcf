@@ -15,9 +15,12 @@
     "test": "standard && start-server-and-test 'node start-trackers.js' 5001 test:all"
   },
   "dependencies": {
+    "array-buffer-to-hex": "^1.0.0",
     "base64-arraybuffer": "^1.0.2",
     "convert-hex": "^0.1.0",
     "debug": "^4.3.4",
+    "get-browser-rtc": "^1.1.0",
+    "isomorphic-fetch": "^3.0.0",
     "pako": "^2.0.4",
     "randomstring": "^1.2.2"
   },
@@ -27,10 +30,9 @@
   "devDependencies": {
     "airtap": "^4.0.4",
     "browserify": "^17.0.0",
-    "get-browser-rtc": "^1.1.0",
     "lint-staged": "^12.3.7",
     "prettier": "^2.7.1",
-    "prettier-standard": "^16.4.1",
+    "prettier-standard": "^15.0.1",
     "standard": "^17.0.0",
     "start-server-and-test": "^1.14.0",
     "tape": "^5.5.3",

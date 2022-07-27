@@ -8,13 +8,12 @@ const getBrowserRTC = require('get-browser-rtc')
 const EventEmitter = require('events')
 const debug = require('debug')('p2pcf')
 const pako = require('pako')
-const secureRandom = require('secure-random')
 const { encode: arrayBufferToBase64 } = require('base64-arraybuffer')
-const { bytesToHex, hexToBytes } = require('convert-hex')
+const { hexToBytes } = require('convert-hex')
 const { createSdp } = require('./utils')
 const randomstring = require('randomstring')
+require('isomorphic-fetch')
 
-const randomHex = c => bytesToHex(secureRandom(c))
 const hexToBase64 = hex => arrayBufferToBase64(hexToBytes(hex))
 
 const MAX_MESSAGE_LENGTH_BYTES = 16000
@@ -133,6 +132,8 @@ class P2PCF extends EventEmitter {
       throw new Error('Room ID must be at least four characters')
     }
 
+    this._step = this._step.bind(this)
+
     this.peers = new Map()
     this.msgChunks = new Map()
     this.responseWaiting = new Map()
@@ -177,14 +178,17 @@ class P2PCF extends EventEmitter {
     if (global.history) {
       if (!global.history.state?._p2pcfContextId) {
         global.history.replaceState(
-          { ...global.history.state, _p2pcfContextId: randomHex(20) },
+          {
+            ...global.history.state,
+            _p2pcfContextId: randomstring.generate({ length: 20 })
+          },
           global.window.location.href
         )
       }
 
       this.contextId = global.history.state.contextId
     } else {
-      this.contextId = randomHex(20)
+      this.contextId = randomstring.generate(20)
     }
   }
 
@@ -210,7 +214,7 @@ class P2PCF extends EventEmitter {
     let sentFirstPoll = false
     let stopFastPollingAt = -1
 
-    return async (finish = false) => {
+    return async function (finish = false) {
       const {
         clientId,
         roomId,
@@ -317,6 +321,8 @@ class P2PCF extends EventEmitter {
           headers['X-Worker-Method'] = 'DELETE'
           keepalive = true
         }
+
+        console.log(headers, body, keepalive)
 
         const res = await fetch(this.workerUrl, {
           method: 'POST',
@@ -850,11 +856,14 @@ class P2PCF extends EventEmitter {
       }
     }, this.networkChangePollIntervalMs)
 
+    this._step = this._step.bind(this)
     this.stepInterval = setInterval(this._step, 500)
     this.stepFinish = () => this._step(true)
 
-    for (const ev of iOSSafari ? ['pagehide'] : ['beforeunload', 'unload']) {
-      window.addEventListener(ev, this.stepFinish)
+    if (global.window) {
+      for (const ev of iOSSafari ? ['pagehide'] : ['beforeunload', 'unload']) {
+        global.window.addEventListener(ev, this.stepFinish)
+      }
     }
 
     // this.on('peer', peer => {
@@ -1100,8 +1109,12 @@ class P2PCF extends EventEmitter {
     }
 
     if (this.stepFinish) {
-      for (const ev of iOSSafari ? ['pagehide'] : ['beforeunload', 'unload']) {
-        window.removeEventListener(ev, this.stepFinish)
+      if (global.window) {
+        for (const ev of iOSSafari
+          ? ['pagehide']
+          : ['beforeunload', 'unload']) {
+          global.window.removeEventListener(ev, this.stepFinish)
+        }
       }
 
       this.stepFinish = null
@@ -1180,8 +1193,7 @@ class P2PCF extends EventEmitter {
     pc.createDataChannel('x')
 
     const p = new Promise(resolve => {
-      // 5 second timeout
-      setTimeout(() => resolve(), 5000)
+      setTimeout(() => resolve(), global.window ? 5000 : 500)
 
       pc.onicecandidate = e => {
         if (!e.candidate) return resolve()

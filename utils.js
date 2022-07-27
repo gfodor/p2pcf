@@ -1,9 +1,9 @@
-const { bytesToHex } = require('convert-hex')
 const { decode: base64ToArrayBuffer } = require('base64-arraybuffer')
+const arrayBufferToHex = require('array-buffer-to-hex')
 
-const base64ToHex = b64 => bytesToHex(base64ToArrayBuffer(b64))
+const base64ToHex = b64 => arrayBufferToHex(base64ToArrayBuffer(b64))
 
-export const createSdp = (isOffer, iceUFrag, icePwd, dtlsFingerprintBase64) => {
+function createSdp (isOffer, iceUFrag, icePwd, dtlsFingerprintBase64) {
   const dtlsHex = base64ToHex(dtlsFingerprintBase64)
   let dtlsFingerprint = ''
 
@@ -37,3 +37,5 @@ export const createSdp = (isOffer, iceUFrag, icePwd, dtlsFingerprintBase64) => {
 
   return sdp.join('\r\n') + '\r\n'
 }
+
+module.exports = { createSdp }

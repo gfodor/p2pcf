@@ -9,7 +9,7 @@ if (process.env.BROWSER_TEST) {
 }
 
 const p2pcfOptions = {
-  workerUrl: 'https://signaling-test.minddrop.workers.dev'
+  workerUrl: 'https://signalling-test.minddrop.workers.dev'
 }
 
 test('get network settings', async function (t) {
@@ -31,6 +31,7 @@ test('get network settings', async function (t) {
 test('basic', async function (t) {
   const p2pcf1 = new P2PCF('p2pcf1', 'room', p2pcfOptions)
   const p2pcf2 = new P2PCF('p2pcf2', 'room', p2pcfOptions)
+
   p2pcf1.on('peerconnect', peer => {
     p2pcf1.send(peer, 'hello')
   })

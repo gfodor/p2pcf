@@ -2,8 +2,8 @@ const BrowserP2PCF = require('./p2pcf')
 const wrtc = require('wrtc')
 
 class P2PCF extends BrowserP2PCF {
-  constructor (identifierString = '') {
-    super(identifierString)
+  constructor (clientId = '', roomId = '', options = {}) {
+    super(clientId, roomId, options)
 
     this.wrtc = wrtc
   }
