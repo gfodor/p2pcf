@@ -12,35 +12,41 @@ const p2pcfOptions = {
   workerUrl: 'https://signalling-test.minddrop.workers.dev'
 }
 
-test('get network settings', async function (t) {
-  const p2pcf1 = new P2PCF('p2pcf', 'room', p2pcfOptions)
-  const [
-    udpEnabled,
-    isSymmetric,
-    reflexiveIps,
-    dtlsFingerprint
-  ] = await p2pcf1._getNetworkSettings()
-  t.true(udpEnabled)
-  t.ok(typeof udpEnabled === 'boolean')
-  t.ok(typeof isSymmetric === 'boolean')
-  t.ok(reflexiveIps.size > 0)
-  t.equal(dtlsFingerprint.length, 95)
-  t.end()
-})
-
-test('basic', async function (t) {
-  const p2pcf1 = new P2PCF('p2pcf1', 'room', p2pcfOptions)
-  const p2pcf2 = new P2PCF('p2pcf2', 'room', p2pcfOptions)
+// test('get network settings', async function (t) {
+//   const p2pcf1 = new P2PCF('p2pcf', 'room', p2pcfOptions)
+//   const [
+//     udpEnabled,
+//     isSymmetric,
+//     reflexiveIps,
+//     dtlsFingerprint
+//   ] = await p2pcf1._getNetworkSettings()
+//   t.true(udpEnabled)
+//   t.ok(typeof udpEnabled === 'boolean')
+//   t.ok(typeof isSymmetric === 'boolean')
+//   t.ok(reflexiveIps.size > 0)
+//   t.equal(dtlsFingerprint.length, 95)
+//   t.end()
+// })
+//
+test('basic', function (t) {
+  const roomId = 'room' + Math.floor(Math.random() * 1000000)
+  const p2pcf1 = new P2PCF('p2pcf1', roomId, p2pcfOptions)
+  const p2pcf2 = new P2PCF('p2pcf2', roomId, p2pcfOptions)
 
   p2pcf1.on('peerconnect', peer => {
     p2pcf1.send(peer, 'hello')
   })
   p2pcf2.on('msg', (peer, msg) => {
     t.equal(msg, 'hello')
-    p2pcf1.destroy()
-    p2pcf2.destroy()
+    console.log('end')
     t.end()
   })
+  t.teardown(() => {
+    console.log('destroy')
+    p2pcf1.destroy()
+    p2pcf2.destroy()
+  })
+  console.log('start')
   p2pcf1.start()
   p2pcf2.start()
 })
