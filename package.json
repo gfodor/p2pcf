@@ -1,0 +1,57 @@
+{
+  "name": "p2pcf",
+  "version": "1.0.0",
+  "description": "P2P connections with Cloudflare Workers",
+  "main": "node.js",
+  "browser": "p2pcf.js",
+  "types": "p2pcf.d.ts",
+  "scripts": {
+    "build": "npm run build:umd && npm run build:umd-tiny",
+    "build:umd": "browserify ./p2pcf.js -s P2PCF > dist/p2pcf.umd.js",
+    "build:umd-tiny": "browserify ./p2pcf.js -p tinyify -s P2PCF > dist/p2pcf.umd.min.js",
+    "test-browser": "BROWSER_TEST=1 airtap --local test/*.js",
+    "test-node": "node test/*.js",
+    "test:all": "npm run test-node && npm run test-browser",
+    "test": "standard && start-server-and-test 'node start-trackers.js' 5001 test:all"
+  },
+  "dependencies": {
+    "debug": "^4.3.4",
+    "pako": "^2.0.4"
+  },
+  "optionalDependencies": {
+    "wrtc": "^0.4.6"
+  },
+  "devDependencies": {
+    "airtap": "^4.0.4",
+    "browserify": "^17.0.0",
+    "eslint": "^8.13.0",
+    "eslint-config-prettier": "^8.5.0",
+    "eslint-plugin-node": "^11.1.0",
+    "eslint-plugin-prettier": "^4.2.1",
+    "lint-staged": "^12.3.7",
+    "prettier": "^2.6.2",
+    "standard": "^17.0.0",
+    "start-server-and-test": "^1.14.0",
+    "tape": "^5.5.3",
+    "tinyify": "^3.1.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gfodor/p2pcf.git"
+  },
+  "keywords": [
+    "p2p",
+    "cf"
+  ],
+  "author": "gfodor",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/gfodor/p2pcf/issues"
+  },
+  "homepage": "https://github.com/gfodor/p2pcf#readme",
+  "standard": {
+    "ignore": [
+      "dist"
+    ]
+  }
+}

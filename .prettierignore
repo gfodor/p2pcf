@@ -1,0 +1,15 @@
+.git/*
+.idea/*
+.next/*
+.vscode/*
+.yarn/*
+assets/*
+build/*
+coverage/*
+dist/*
+node_modules/*
+public/*
+storage/*
+vendor/*
+package-lock.json
+yarn.lock
