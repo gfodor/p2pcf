@@ -12,7 +12,6 @@ const { encode: arrayBufferToBase64 } = require('base64-arraybuffer')
 const { hexToBytes } = require('convert-hex')
 const { createSdp } = require('./utils')
 const randomstring = require('randomstring')
-require('isomorphic-fetch')
 
 const hexToBase64 = hex => arrayBufferToBase64(hexToBytes(hex))
 
@@ -68,13 +67,11 @@ const DEFAULT_TURN_ICE = [
   }
 ]
 
-const ua = (global.window && global.window.navigator.userAgent) || ''
+const ua = window.navigator.userAgent
 const iOS = !!ua.match(/iPad/i) || !!ua.match(/iPhone/i)
 const webkit = !!ua.match(/WebKit/i)
 const iOSSafari = !!(iOS && webkit && !ua.match(/CriOS/i))
-const isFirefox = !!(
-  global.navigator?.userAgent.toLowerCase().indexOf('firefox') > -1
-)
+const isFirefox = !!(navigator?.userAgent.toLowerCase().indexOf('firefox') > -1)
 
 // parseCandidate from https://github.com/fippo/sdp
 const parseCandidate = line => {
@@ -147,6 +144,7 @@ class P2PCF extends EventEmitter {
     this.packageReceivedFromPeers = new Set()
     this.lastReceivedDataTimestamps = new Map()
     this.packageReceivedFromPeers = new Set()
+    this.startedAtTimestamp = null
 
     this.workerUrl =
       options.workerUrl || 'https://signalling.minddrop.workers.dev'
@@ -175,22 +173,26 @@ class P2PCF extends EventEmitter {
     this.reflexiveIps = null
     this.dtlsFingerprint = null
 
-    // ContextID is maintained across page refreshes
-    if (global.history) {
-      if (!global.history.state?._p2pcfContextId) {
-        global.history.replaceState(
-          {
-            ...global.history.state,
-            _p2pcfContextId: randomstring.generate({ length: 20 })
-          },
-          global.window.location.href
-        )
-      }
+    // step
+    this.isSending = false
+    this.finished = false
+    this.nextStepTime = -1
+    this.deleteKey = null
+    this.sentFirstPoll = false
+    this.stopFastPollingAt = -1
 
-      this.contextId = global.history.state.contextId
-    } else {
-      this.contextId = randomstring.generate(20)
+    // ContextID is maintained across page refreshes
+    if (!window.history.state?._p2pcfContextId) {
+      window.history.replaceState(
+        {
+          ...window.history.state,
+          _p2pcfContextId: randomstring.generate({ length: 20 })
+        },
+        window.location.href
+      )
     }
+
+    this.contextId = window.history.state._p2pcfContextId
   }
 
   async _init () {
@@ -202,211 +204,200 @@ class P2PCF extends EventEmitter {
     }
   }
 
-  _step = (function () {
-    const startedTimestamp = new Date().getTime()
+  async _step (finish = false) {
+    const {
+      sessionId,
+      clientId,
+      roomId,
+      contextId,
+      stateExpirationIntervalMs,
+      stateHeartbeatWindowMs,
+      packages,
+      fastPollingDurationMs,
+      fastPollingRateMs,
+      slowPollingRateMs
+    } = this
 
-    let isSending = false
-    let finished = false
-    let nextStepTime = -1
-    let deleteKey = null
-    let sentFirstPoll = false
-    let stopFastPollingAt = -1
+    const now = new Date().getTime()
 
-    return async function (finish = false) {
-      const {
+    if (finish) {
+      if (this.finished) return
+      this.finished = true
+    } else {
+      if (this.nextStepTime > now) return
+      if (this.isSending) return
+      if (this.reflexiveIps.length === 0) return
+    }
+
+    this.isSending = true
+
+    try {
+      const localDtlsFingerprintBase64 = hexToBase64(
+        this.dtlsFingerprint.replaceAll(':', '')
+      )
+
+      const localPeerInfo = [
         sessionId,
         clientId,
-        roomId,
-        contextId,
-        stateExpirationIntervalMs,
-        stateHeartbeatWindowMs,
-        packages,
-        fastPollingDurationMs,
-        fastPollingRateMs,
-        slowPollingRateMs
-      } = this
+        this.isSymmetric,
+        localDtlsFingerprintBase64,
+        this.startedAtTimestamp,
+        [...this.reflexiveIps]
+      ]
 
-      const now = new Date().getTime()
+      const payload = { r: roomId, k: contextId }
 
       if (finish) {
-        if (finished) return
-        finished = true
-      } else {
-        if (nextStepTime > now) return
-        if (isSending) return
-        if (this.reflexiveIps.length === 0) return
+        payload.dk = this.deleteKey
       }
 
-      isSending = true
+      const expired =
+        this.dataTimestamp === null ||
+        now - this.dataTimestamp >=
+          stateExpirationIntervalMs - stateHeartbeatWindowMs
 
-      try {
-        const localDtlsFingerprintBase64 = hexToBase64(
-          this.dtlsFingerprint.replaceAll(':', '')
-        )
+      const packagesChanged = this.lastPackages !== JSON.stringify(packages)
+      let includePackages = false
 
-        const localPeerInfo = [
-          sessionId,
-          clientId,
-          this.isSymmetric,
-          localDtlsFingerprintBase64,
-          startedTimestamp,
-          [...this.reflexiveIps]
-        ]
+      if (expired || packagesChanged || finish) {
+        // This will force a write
+        this.dataTimestamp = now
 
-        const payload = { r: roomId, k: contextId }
+        // Compact packages, expire any of them sent more than a minute ago.
+        // (ICE will timeout by then, even if other latency fails us.)
+        for (let i = 0; i < packages.length; i++) {
+          const sentAt = packages[i][packages[i].length - 2]
 
-        if (finish) {
-          payload.dk = deleteKey
-        }
-
-        const expired =
-          this.dataTimestamp === null ||
-          now - this.dataTimestamp >=
-            stateExpirationIntervalMs - stateHeartbeatWindowMs
-
-        const packagesChanged = this.lastPackages !== JSON.stringify(packages)
-        let includePackages = false
-
-        if (expired || packagesChanged || finish) {
-          // This will force a write
-          this.dataTimestamp = now
-
-          // Compact packages, expire any of them sent more than a minute ago.
-          // (ICE will timeout by then, even if other latency fails us.)
-          for (let i = 0; i < packages.length; i++) {
-            const sentAt = packages[i][packages[i].length - 2]
-
-            if (now - sentAt > 60 * 1000) {
-              packages[i] = null
-            }
-          }
-
-          while (packages.indexOf(null) >= 0) {
-            packages.splice(packages.indexOf(null), 1)
-          }
-
-          includePackages = true
-        }
-
-        if (finish) {
-          includePackages = false
-        }
-
-        // The first poll should just be a read, no writes, to build up packages before we do a write
-        // to reduce worker I/O. So don't include the data + packages on the first request.
-        if (sentFirstPoll) {
-          payload.d = localPeerInfo
-          payload.t = this.dataTimestamp
-          payload.x = this.stateExpirationIntervalMs
-
-          if (includePackages) {
-            payload.p = packages
-            this.lastPackages = JSON.stringify(packages)
+          if (now - sentAt > 60 * 1000) {
+            packages[i] = null
           }
         }
 
-        let body = JSON.stringify(payload)
-        const deflatedBody = arrayBufferToBase64(pako.deflate(body))
-        const headers = { 'Content-Type': 'application/json ' }
-        let keepalive = false
-
-        if (body.length > deflatedBody.length) {
-          body = deflatedBody
-          headers['Content-Type'] = 'application/json'
-          headers['Content-Encoding'] = 'text/plain'
-          headers['Content-Length'] = deflatedBody.length
+        while (packages.indexOf(null) >= 0) {
+          packages.splice(packages.indexOf(null), 1)
         }
 
-        if (finish) {
-          headers['X-Worker-Method'] = 'DELETE'
-          keepalive = true
+        includePackages = true
+      }
+
+      if (finish) {
+        includePackages = false
+      }
+
+      // The first poll should just be a read, no writes, to build up packages before we do a write
+      // to reduce worker I/O. So don't include the data + packages on the first request.
+      if (this.sentFirstPoll) {
+        payload.d = localPeerInfo
+        payload.t = this.dataTimestamp
+        payload.x = this.stateExpirationIntervalMs
+
+        if (includePackages) {
+          payload.p = packages
+          this.lastPackages = JSON.stringify(packages)
         }
+      }
+
+      let body = JSON.stringify(payload)
+      const deflatedBody = arrayBufferToBase64(pako.deflate(body))
+      const headers = { 'Content-Type': 'application/json ' }
+      let keepalive = false
+
+      if (body.length > deflatedBody.length) {
+        body = deflatedBody
+        headers['Content-Type'] = 'application/json'
+        headers['Content-Encoding'] = 'text/plain'
+        headers['Content-Length'] = deflatedBody.length
+      }
+
+      if (finish) {
+        headers['X-Worker-Method'] = 'DELETE'
+        keepalive = true
+      }
+
+      const res = await fetch(this.workerUrl, {
+        method: 'POST',
+        headers,
+        body,
+        keepalive
+      })
+
+      const { ps: remotePeerDatas, pk: remotePackages, dk } = await res.json()
+
+      if (dk) {
+        this.deleteKey = dk
+      }
+
+      if (finish) return
+
+      // Slight optimization: if the peers are empty on the first poll, immediately publish data to reduce
+      // delay before first peers show up.
+      if (remotePeerDatas.length === 0 && !this.sentFirstPoll) {
+        payload.d = localPeerInfo
+        payload.t = this.dataTimestamp
+        payload.x = this.stateExpirationIntervalMs
+        payload.p = packages
+        this.lastPackages = JSON.stringify(packages)
 
         const res = await fetch(this.workerUrl, {
           method: 'POST',
-          headers,
-          body,
-          keepalive
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
         })
 
-        const { ps: remotePeerDatas, pk: remotePackages, dk } = await res.json()
+        const { dk } = await res.json()
 
         if (dk) {
-          deleteKey = dk
+          this.deleteKey = dk
         }
-
-        if (finish) return
-
-        // Slight optimization: if the peers are empty on the first poll, immediately publish data to reduce
-        // delay before first peers show up.
-        if (remotePeerDatas.length === 0 && !sentFirstPoll) {
-          payload.d = localPeerInfo
-          payload.t = this.dataTimestamp
-          payload.x = this.stateExpirationIntervalMs
-          payload.p = packages
-          this.lastPackages = JSON.stringify(packages)
-
-          const res = await fetch(this.workerUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-          })
-
-          const { dk } = await res.json()
-
-          if (dk) {
-            deleteKey = dk
-          }
-        }
-
-        sentFirstPoll = true
-
-        const previousPeerSessionIds = [...this.peers.keys()]
-
-        this._handleWorkerResponse(
-          startedTimestamp,
-          localPeerInfo,
-          localDtlsFingerprintBase64,
-          packages,
-          remotePeerDatas,
-          remotePackages
-        )
-
-        const activeSessionIds = remotePeerDatas.map(p => p[0])
-
-        const peersChanged =
-          previousPeerSessionIds.length !== activeSessionIds.length ||
-          activeSessionIds.find(c => !previousPeerSessionIds.includes(c)) ||
-          previousPeerSessionIds.find(c => !activeSessionIds.includes(c))
-
-        // Rate limit requests when room is empty, or look for new joins
-        // Go faster when things are changing to avoid ICE timeouts
-        if (peersChanged) {
-          stopFastPollingAt = now + fastPollingDurationMs
-        }
-
-        if (now < stopFastPollingAt) {
-          nextStepTime = now + fastPollingRateMs
-        } else {
-          nextStepTime = now + slowPollingRateMs
-        }
-      } catch (e) {
-        console.error(e)
-        nextStepTime = now + slowPollingRateMs
-      } finally {
-        isSending = false
       }
+
+      this.sentFirstPoll = true
+
+      const previousPeerSessionIds = [...this.peers.keys()]
+
+      this._handleWorkerResponse(
+        localPeerInfo,
+        localDtlsFingerprintBase64,
+        packages,
+        remotePeerDatas,
+        remotePackages
+      )
+
+      const activeSessionIds = remotePeerDatas.map(p => p[0])
+
+      const peersChanged =
+        previousPeerSessionIds.length !== activeSessionIds.length ||
+        activeSessionIds.find(c => !previousPeerSessionIds.includes(c)) ||
+        previousPeerSessionIds.find(c => !activeSessionIds.includes(c))
+
+      // Rate limit requests when room is empty, or look for new joins
+      // Go faster when things are changing to avoid ICE timeouts
+      if (peersChanged) {
+        this.stopFastPollingAt = now + fastPollingDurationMs
+      }
+
+      if (now < this.stopFastPollingAt) {
+        this.nextStepTime = now + fastPollingRateMs
+      } else {
+        this.nextStepTime = now + slowPollingRateMs
+      }
+    } catch (e) {
+      console.error(e)
+      this.nextStepTime = now + slowPollingRateMs
+    } finally {
+      this.isSending = false
     }
-  })()
+  }
 
   _handleWorkerResponse (
-    localStartedAtTimestamp,
     localPeerData,
     localDtlsFingerprintBase64,
     localPackages,
     remotePeerDatas,
     remotePackages
   ) {
+    const localStartedAtTimestamp = this.startedAtTimestamp
+
     const {
       dtlsCert: localDtlsCert,
       peers,
@@ -452,6 +443,11 @@ class P2PCF extends EventEmitter {
           : localSymmetric
 
       console.log(
+        localSymmetric === remoteSymmetric,
+        localStartedAtTimestamp === remoteStartedAtTimestamp,
+        localSessionId > remoteSessionId,
+        localStartedAtTimestamp > remoteStartedAtTimestamp,
+
         'Peer type :',
         isPeerA ? 'A' : 'B',
         ':',
@@ -460,7 +456,13 @@ class P2PCF extends EventEmitter {
         'connecting with',
         remoteClientId,
         remoteSessionId,
-        ':'
+        ':',
+        localSymmetric,
+        remoteSymmetric,
+        localSessionId,
+        remoteSessionId,
+        localStartedAtTimestamp,
+        remoteStartedAtTimestamp
       )
 
       // If either side is symmetric, use TURN and hope we avoid connecting via relays
@@ -545,7 +547,7 @@ class P2PCF extends EventEmitter {
         }
 
         pc.onicecandidate = e => {
-          const timeout = setTimeout(finishIce, global.window ? 5000 : 500)
+          const timeout = setTimeout(finishIce, window ? 5000 : 500)
 
           if (!e.candidate) {
             clearTimeout(timeout)
@@ -750,7 +752,7 @@ class P2PCF extends EventEmitter {
           }
 
           pc.onicecandidate = e => {
-            const timeout = setTimeout(finishIce, global.window ? 5000 : 500)
+            const timeout = setTimeout(finishIce, 5000)
 
             // Push package onto the given package list, so it will be sent in next polling step.
             if (!e.candidate) {
@@ -997,6 +999,7 @@ class P2PCF extends EventEmitter {
    * Connect to network and start discovering peers
    */
   async start () {
+    this.startedAtTimestamp = new Date().getTime()
     await this._init()
 
     const [
@@ -1061,10 +1064,8 @@ class P2PCF extends EventEmitter {
     this.stepInterval = setInterval(this._step, 500)
     this.destroyOnUnload = () => this.destroy()
 
-    if (global.window) {
-      for (const ev of iOSSafari ? ['pagehide'] : ['beforeunload', 'unload']) {
-        global.window.addEventListener(ev, this.destroyOnUnload)
-      }
+    for (const ev of iOSSafari ? ['pagehide'] : ['beforeunload', 'unload']) {
+      window.addEventListener(ev, this.destroyOnUnload)
     }
 
     // this.on('peer', peer => {
@@ -1317,12 +1318,8 @@ class P2PCF extends EventEmitter {
     }
 
     if (this.destroyOnUnload) {
-      if (global.window) {
-        for (const ev of iOSSafari
-          ? ['pagehide']
-          : ['beforeunload', 'unload']) {
-          global.window.removeEventListener(ev, this.destroyOnUnload)
-        }
+      for (const ev of iOSSafari ? ['pagehide'] : ['beforeunload', 'unload']) {
+        window.removeEventListener(ev, this.destroyOnUnload)
       }
 
       this.destroyOnUnload = null
@@ -1401,7 +1398,7 @@ class P2PCF extends EventEmitter {
     pc.createDataChannel('x')
 
     const p = new Promise(resolve => {
-      setTimeout(() => resolve(), global.window ? 5000 : 500)
+      setTimeout(() => resolve(), 5000)
 
       pc.onicecandidate = e => {
         if (!e.candidate) return resolve()

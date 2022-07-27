@@ -2,30 +2,28 @@
   "name": "p2pcf",
   "version": "1.0.0",
   "description": "P2P connections with Cloudflare Workers",
-  "main": "node.js",
-  "browser": "p2pcf.js",
+  "browser": {
+    "crypto": "crypto-browserify",
+    "stream": "stream-browserify"
+  },
   "types": "p2pcf.d.ts",
   "scripts": {
-    "build": "npm run build:umd && npm run build:umd-tiny",
-    "build:umd": "browserify ./p2pcf.js -s P2PCF > dist/p2pcf.umd.js",
-    "build:umd-tiny": "browserify ./p2pcf.js -p tinyify -s P2PCF > dist/p2pcf.umd.min.js",
-    "test-browser": "BROWSER_TEST=1 airtap --local test/*.js",
-    "test-node": "node test/*.js",
-    "test:all": "npm run test-node && npm run test-browser",
-    "test": "standard && start-server-and-test 'node start-trackers.js' 5001 test:all"
+    "build": "esbuild ./p2pcf.js --inject:esbuild.inject.js --define:global=window --format=esm --bundle --outfile=dist/p2pcf.js",
+    "build:min": "esbuild ./p2pcf.js --minify --inject:esbuild.inject.js --define:global=window --format=esm --bundle --outfile=dist/p2pcf.min.js"
   },
   "dependencies": {
     "array-buffer-to-hex": "^1.0.0",
     "base64-arraybuffer": "^1.0.2",
+    "buffer": "^6.0.3",
     "convert-hex": "^0.1.0",
+    "crypto-browserify": "^3.12.0",
     "debug": "^4.3.4",
+    "esbuild": "^0.14.50",
     "get-browser-rtc": "^1.1.0",
-    "isomorphic-fetch": "^3.0.0",
     "pako": "^2.0.4",
-    "randomstring": "^1.2.2"
-  },
-  "optionalDependencies": {
-    "wrtc": "^0.4.6"
+    "process": "^0.11.10",
+    "randomstring": "^1.2.2",
+    "stream-browserify": "^3.0.0"
   },
   "devDependencies": {
     "airtap": "^4.0.4",
