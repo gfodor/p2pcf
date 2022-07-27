@@ -194,10 +194,7 @@ class P2PCF extends EventEmitter {
   }
 
   async _init () {
-    if (
-      this.dtlsCert === null &&
-      this.wrtc.RTCPeerConnection.generateCertificate
-    ) {
+    if (this.dtlsCert === null) {
       this.dtlsCert = await this.wrtc.RTCPeerConnection.generateCertificate({
         name: 'ECDSA',
         namedCurve: 'P-256'
