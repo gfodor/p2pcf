@@ -8,8 +8,12 @@ if (process.env.BROWSER_TEST) {
   P2PCF = require('../node')
 }
 
+const p2pcfOptions = {
+  workerUrl: 'https://signaling-test.minddrop.workers.dev'
+}
+
 test('get network settings', async function (t) {
-  const p2pcf1 = new P2PCF('p2pcf')
+  const p2pcf1 = new P2PCF('p2pcf', p2pcfOptions)
   const [
     udpEnabled,
     isSymmetric,
@@ -25,18 +29,19 @@ test('get network settings', async function (t) {
 })
 
 test('basic', async function (t) {
-  // var p2pcf2 = new p2pcf('p2pcf')
-  // p2pcf1.on('peerconnect', (peer) => {
-  //   p2pcf1.send(peer, 'hello')
-  // })
-  // p2pcf2.on('msg', (peer, msg) => {
-  //   t.equal(msg, 'hello')
-  //   p2pcf1.destroy()
-  //   p2pcf2.destroy()
-  //   t.end()
-  // })
-  // p2pcf1.start()
-  // p2pcf2.start()
+  const p2pcf1 = new P2PCF('p2pcf1', p2pcfOptions)
+  const p2pcf2 = new P2PCF('p2pcf2', p2pcfOptions)
+  p2pcf1.on('peerconnect', peer => {
+    p2pcf1.send(peer, 'hello')
+  })
+  p2pcf2.on('msg', (peer, msg) => {
+    t.equal(msg, 'hello')
+    p2pcf1.destroy()
+    p2pcf2.destroy()
+    t.end()
+  })
+  p2pcf1.start()
+  p2pcf2.start()
 })
 
 // test('character message', function (t) {

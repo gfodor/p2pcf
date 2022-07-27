@@ -42,23 +42,28 @@ const DEFAULT_STUN_ICE = [
   { urls: 'stun:global.stun.twilio.com:3478' }
 ]
 
-// const DEFAULT_TURN_ICE = [
-//   {
-//     urls: 'turn:openrelay.metered.ca:80',
-//     username: 'openrelayproject',
-//     credential: 'openrelayproject'
-//   },
-//   {
-//     urls: 'turn:openrelay.metered.ca:443',
-//     username: 'openrelayproject',
-//     credential: 'openrelayproject'
-//   },
-//   {
-//     urls: 'turn:openrelay.metered.ca:443?transport=tcp',
-//     username: 'openrelayproject',
-//     credential: 'openrelayproject'
-//   }
-// ]
+const DEFAULT_TURN_ICE = [
+  {
+    urls: 'turn:openrelay.metered.ca:80',
+    username: 'openrelayproject',
+    credential: 'openrelayproject'
+  },
+  {
+    urls: 'turn:openrelay.metered.ca:443',
+    username: 'openrelayproject',
+    credential: 'openrelayproject'
+  },
+  {
+    urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+    username: 'openrelayproject',
+    credential: 'openrelayproject'
+  }
+]
+
+const ua = (global.window && global.window.navigator.userAgent) || ''
+const iOS = !!ua.match(/iPad/i) || !!ua.match(/iPhone/i)
+const webkit = !!ua.match(/WebKit/i)
+const iOSSafari = iOS && webkit && !ua.match(/CriOS/i)
 
 // parseCandidate from https://github.com/fippo/sdp
 const parseCandidate = line => {
@@ -105,128 +110,184 @@ const parseCandidate = line => {
 }
 
 class P2PCF extends EventEmitter {
-  constructor (identifier = '') {
+  constructor (identifier = '', options = {}) {
     super()
+
+    if (!identifier || identifier.length < 4) {
+      throw new Error('Identifier must be at least four characters')
+    }
 
     this.peers = new Map()
     this.msgChunks = new Map()
     this.responseWaiting = new Map()
     this.connectedClients = []
     this.identifier = identifier
-    this._wrtc = getBrowserRTC()
-    this._dtlsCert = null
+    this.packages = []
+    this.dataTimestamp = null
+    this.lastPackages = null
+    this.packageReceivedFromPeers = new Set()
+    this.workerUrl =
+      options.workerUrl || 'https://signaling.minddrop.workers.dev'
+
+    if (this.workerUrl.endsWith('/')) {
+      this.workerUrl = this.workerUrl.substring(0, this.workerUrl.length - 1)
+    }
+
+    this.stunIceServers = options.stunIceServers || DEFAULT_STUN_ICE
+    this.turnIceServers = options.turnIceServers || DEFAULT_TURN_ICE
+    this.networkChangePollIntervalMs =
+      options.networkChangePollIntervalMs || 15000
+
+    this.wrtc = getBrowserRTC()
+    this.dtlsCert = null
   }
 
-  async init () {
+  async _init () {
     if (
-      this._dtlsCert === null &&
-      this._wrtc.RTCPeerConnection.generateCertificate
+      this.dtlsCert === null &&
+      this.wrtc.RTCPeerConnection.generateCertificate
     ) {
-      this._dtlsCert = await this._wrtc.RTCPeerConnection.generateCertificate({
+      this.dtlsCert = await this.wrtc.RTCPeerConnection.generateCertificate({
         name: 'ECDSA',
         namedCurve: 'P-256'
       })
     }
   }
 
+  _step = (function () {
+    return async () => {
+      console.log('hello')
+    }
+  })()
+
   /**
    * Connect to network and start discovering peers
    */
-  start () {
-    this.on('peer', peer => {
-      let newpeer = false
-      if (!this.peers.has(peer.id)) {
-        newpeer = true
-        this.peers.set(peer.id, new Map())
-        this.responseWaiting.set(peer.id, new Map())
+  async start () {
+    await this._init()
+    let [
+      udpEnabled,
+      isSymmetric,
+      reflexiveIps,
+      dtlsFingerprint
+    ] = await this._getNetworkSettings(this.dtlsCert)
+
+    this.networkSettingsInterval = setInterval(async () => {
+      const [
+        newUdpEnabled,
+        newIsSymmetric,
+        newReflexiveIps,
+        newDtlsFingerprint
+      ] = await this._getNetworkSettings(this.dtlsCert)
+
+      if (
+        newUdpEnabled !== udpEnabled ||
+        newIsSymmetric !== isSymmetric ||
+        newDtlsFingerprint !== dtlsFingerprint ||
+        [...reflexiveIps].join(' ') !== [...newReflexiveIps].join(' ')
+      ) {
+        // Network reset, clear all peers
+        this.packages.length = 0
+
+        for (const clientId of this.peers.keys()) {
+          this._removePeerByClientId(clientId)
+        }
+
+        this.dataTimestamp = null
+        this.lastPackages = null
+        udpEnabled = newUdpEnabled
+        isSymmetric = newIsSymmetric
+        reflexiveIps = newReflexiveIps
+        dtlsFingerprint = newDtlsFingerprint
       }
+    }, this.networkChangePollIntervalMs)
 
-      peer.on('connect', () => {
-        /**
-         * Multiple data channels to one peer is possible
-         * The `peer` object actually refers to a peer with a data channel. Even though it may have same `id` (peerID) property, the data channel will be different. Different trackers giving the same "peer" will give the `peer` object with different channels.
-         * We will store two channels in case one of them fails
-         * A peer is removed if all data channels become unavailable
-         */
-        const channels = this.peers.get(peer.id)
+    this.stepInterval = setInterval(this._step, 500)
+    this.stepFinish = () => this._step(true)
 
-        let connectedChannelCount = 0
-        for (const peer of channels.values()) {
-          if (!peer.connected) continue
-          connectedChannelCount++
-        }
+    for (const ev of iOSSafari ? ['pagehide'] : ['beforeunload', 'unload']) {
+      window.addEventListener(ev, this.stepFinish)
+    }
 
-        if (connectedChannelCount === 0) {
-          channels.set(peer.channelName, peer)
-
-          if (newpeer) {
-            this.emit('peerconnect', peer)
-          }
-        } else {
-          peer.destroy()
-        }
-
-        this._updateConnectedClients()
-      })
-
-      peer.on('data', data => {
-        this.emit('data', peer, data)
-
-        let messageId = null
-        let u16 = null
-
-        if (data.length >= CHUNK_HEADER_LENGTH_BYTES) {
-          u16 = new Uint16Array(
-            data.buffer,
-            data.byteOffset,
-            CHUNK_HEADER_LENGTH_BYTES / 2
-          )
-
-          if (u16[0] === CHUNK_MAGIC_WORD) {
-            messageId = u16[1]
-          }
-        }
-
-        if (messageId !== null) {
-          try {
-            const chunkId = u16[2]
-            const last = u16[3] !== 0
-
-            const msg = this._chunkHandler(data, messageId, chunkId, last)
-
-            if (last) {
-              /**
-               * If there's someone waiting for a response, call them
-               */
-              if (this.responseWaiting.get(peer.id).has(messageId)) {
-                this.responseWaiting.get(peer.id).get(messageId)([peer, msg])
-                this.responseWaiting.get(peer.id).delete(messageId)
-              } else {
-                this.emit('msg', peer, msg)
-              }
-
-              this._destroyChunks(messageId)
-            }
-          } catch (e) {
-            console.error(e)
-          }
-        } else {
-          this.emit('msg', peer, data)
-        }
-      })
-
-      peer.on('error', err => {
-        this._removePeer(peer)
-        this._updateConnectedClients()
-        debug('Error in connection : ' + err)
-      })
-
-      peer.on('close', () => {
-        this._removePeer(peer)
-        this._updateConnectedClients()
-        debug('Connection closed with ' + peer.id)
-      })
-    })
+    // this.on('peer', peer => {
+    //   let newpeer = false
+    //   if (!this.peers.has(peer.id)) {
+    //     newpeer = true
+    //     this.peers.set(peer.id, new Map())
+    //     this.responseWaiting.set(peer.id, new Map())
+    //   }
+    //   peer.on('connect', () => {
+    //     /**
+    //      * Multiple data channels to one peer is possible
+    //      * The `peer` object actually refers to a peer with a data channel. Even though it may have same `id` (peerID) property, the data channel will be different. Different trackers giving the same "peer" will give the `peer` object with different channels.
+    //      * We will store two channels in case one of them fails
+    //      * A peer is removed if all data channels become unavailable
+    //      */
+    //     const channels = this.peers.get(peer.id)
+    //     let connectedChannelCount = 0
+    //     for (const peer of channels.values()) {
+    //       if (!peer.connected) continue
+    //       connectedChannelCount++
+    //     }
+    //     if (connectedChannelCount === 0) {
+    //       channels.set(peer.channelName, peer)
+    //       if (newpeer) {
+    //         this.emit('peerconnect', peer)
+    //       }
+    //     } else {
+    //       peer.destroy()
+    //     }
+    //     this._updateConnectedClients()
+    //   })
+    //   peer.on('data', data => {
+    //     this.emit('data', peer, data)
+    //     let messageId = null
+    //     let u16 = null
+    //     if (data.length >= CHUNK_HEADER_LENGTH_BYTES) {
+    //       u16 = new Uint16Array(
+    //         data.buffer,
+    //         data.byteOffset,
+    //         CHUNK_HEADER_LENGTH_BYTES / 2
+    //       )
+    //       if (u16[0] === CHUNK_MAGIC_WORD) {
+    //         messageId = u16[1]
+    //       }
+    //     }
+    //     if (messageId !== null) {
+    //       try {
+    //         const chunkId = u16[2]
+    //         const last = u16[3] !== 0
+    //         const msg = this._chunkHandler(data, messageId, chunkId, last)
+    //         if (last) {
+    //           /**
+    //            * If there's someone waiting for a response, call them
+    //            */
+    //           if (this.responseWaiting.get(peer.id).has(messageId)) {
+    //             this.responseWaiting.get(peer.id).get(messageId)([peer, msg])
+    //             this.responseWaiting.get(peer.id).delete(messageId)
+    //           } else {
+    //             this.emit('msg', peer, msg)
+    //           }
+    //           this._destroyChunks(messageId)
+    //         }
+    //       } catch (e) {
+    //         console.error(e)
+    //       }
+    //     } else {
+    //       this.emit('msg', peer, data)
+    //     }
+    //   })
+    //   peer.on('error', err => {
+    //     this._removePeer(peer)
+    //     this._updateConnectedClients()
+    //     debug('Error in connection : ' + err)
+    //   })
+    //   peer.on('close', () => {
+    //     this._removePeer(peer)
+    //     this._updateConnectedClients()
+    //     debug('Connection closed with ' + peer.id)
+    //   })
+    // })
   }
 
   /**
@@ -246,6 +307,25 @@ class P2PCF extends EventEmitter {
 
       this.responseWaiting.delete(peer.id)
       this.peers.delete(peer.id)
+    }
+  }
+
+  async _removePeerByClientId (clientId) {
+    const { peers, packageReceivedFromPeers, packages } = this
+    if (!peers.has(clientId)) return
+    const peer = peers.get(clientId)
+    peer.close()
+    packageReceivedFromPeers.delete(clientId)
+    peers.delete(clientId)
+
+    for (let i = 0; i < packages.length; i++) {
+      if (packages[i][0] === clientId) {
+        packages[i] = null
+      }
+    }
+
+    while (packages.indexOf(null) >= 0) {
+      packages.splice(packages.indexOf(null), 1)
     }
   }
 
@@ -361,6 +441,24 @@ class P2PCF extends EventEmitter {
    * Destroy object
    */
   destroy () {
+    if (this.networkSettingsInterval) {
+      clearInterval(this.networkSettingsInterval)
+      this.networkSettingsInterval = null
+    }
+
+    if (this.stepInterval) {
+      clearInterval(this.stepInterval)
+      this.stepInterval = null
+    }
+
+    if (this.stepFinish) {
+      for (const ev of iOSSafari ? ['pagehide'] : ['beforeunload', 'unload']) {
+        window.removeEventListener(ev, this.stepFinish)
+      }
+
+      this.stepFinish = null
+    }
+
     for (const channels of this.peers.values()) {
       for (const peer of channels.values()) {
         peer.destroy()
@@ -418,19 +516,19 @@ class P2PCF extends EventEmitter {
   }
 
   async _getNetworkSettings () {
-    await this.init()
+    await this._init()
 
     let dtlsFingerprint = null
     const candidates = []
     const reflexiveIps = new Set()
 
-    const peerOptions = { iceServers: DEFAULT_STUN_ICE }
+    const peerOptions = { iceServers: this.stunIceServers }
 
-    if (this._dtlsCert) {
-      peerOptions.certificates = [this._dtlsCert]
+    if (this.dtlsCert) {
+      peerOptions.certificates = [this.dtlsCert]
     }
 
-    const pc = new this._wrtc.RTCPeerConnection(peerOptions)
+    const pc = new this.wrtc.RTCPeerConnection(peerOptions)
     pc.createDataChannel('x')
 
     const p = new Promise(resolve => {

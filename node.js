@@ -5,7 +5,7 @@ class P2PCF extends BrowserP2PCF {
   constructor (identifierString = '') {
     super(identifierString)
 
-    this._wrtc = wrtc
+    this.wrtc = wrtc
   }
 }
 
