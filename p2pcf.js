@@ -4,6 +4,7 @@
  * Licensed under MIT
  */
 
+const getBrowserRTC = require('get-browser-rtc')
 const EventEmitter = require('events')
 const debug = require('debug')('p2pcf')
 
@@ -14,6 +15,95 @@ const CHUNK_MAGIC_WORD = 8121
 const CHUNK_MAX_LENGTH_BYTES =
   MAX_MESSAGE_LENGTH_BYTES - CHUNK_HEADER_LENGTH_BYTES
 
+const CANDIDATE_TYPES = {
+  host: 0,
+  srflx: 1,
+  relay: 2
+}
+
+const CANDIDATE_TCP_TYPES = {
+  active: 0,
+  passive: 1,
+  so: 2
+}
+
+const CANDIDATE_IDX = {
+  TYPE: 0,
+  PROTOCOL: 1,
+  IP: 2,
+  PORT: 3,
+  RELATED_IP: 4,
+  RELATED_PORT: 5,
+  TCP_TYPE: 6
+}
+
+const DEFAULT_STUN_ICE = [
+  { urls: 'stun:stun1.l.google.com:19302' },
+  { urls: 'stun:global.stun.twilio.com:3478' }
+]
+
+// const DEFAULT_TURN_ICE = [
+//   {
+//     urls: 'turn:openrelay.metered.ca:80',
+//     username: 'openrelayproject',
+//     credential: 'openrelayproject'
+//   },
+//   {
+//     urls: 'turn:openrelay.metered.ca:443',
+//     username: 'openrelayproject',
+//     credential: 'openrelayproject'
+//   },
+//   {
+//     urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+//     username: 'openrelayproject',
+//     credential: 'openrelayproject'
+//   }
+// ]
+
+// parseCandidate from https://github.com/fippo/sdp
+const parseCandidate = line => {
+  let parts
+
+  // Parse both variants.
+  if (line.indexOf('a=candidate:') === 0) {
+    parts = line.substring(12).split(' ')
+  } else {
+    parts = line.substring(10).split(' ')
+  }
+
+  const candidate = [
+    CANDIDATE_TYPES[parts[7]], // type
+    parts[2].toLowerCase() === 'udp' ? 0 : 1, // protocol
+    parts[4], // ip
+    parseInt(parts[5], 10) // port
+  ]
+
+  for (let i = 8; i < parts.length; i += 2) {
+    switch (parts[i]) {
+      case 'raddr':
+        while (candidate.length < 5) candidate.push(null)
+        candidate[4] = parts[i + 1]
+        break
+      case 'rport':
+        while (candidate.length < 6) candidate.push(null)
+        candidate[5] = parseInt(parts[i + 1], 10)
+        break
+      case 'tcptype':
+        while (candidate.length < 7) candidate.push(null)
+        candidate[6] = CANDIDATE_TCP_TYPES[parts[i + 1]]
+        break
+      default:
+        // Unknown extensions are silently ignored.
+        break
+    }
+  }
+
+  while (candidate.length < 8) candidate.push(null)
+  candidate[7] = parseInt(parts[3], 10) // Priority last
+
+  return candidate
+}
+
 class P2PCF extends EventEmitter {
   constructor (identifier = '') {
     super()
@@ -23,6 +113,20 @@ class P2PCF extends EventEmitter {
     this.responseWaiting = new Map()
     this.connectedClients = []
     this.identifier = identifier
+    this._wrtc = getBrowserRTC()
+    this._dtlsCert = null
+  }
+
+  async init () {
+    if (
+      this._dtlsCert === null &&
+      this._wrtc.RTCPeerConnection.generateCertificate
+    ) {
+      this._dtlsCert = await this._wrtc.RTCPeerConnection.generateCertificate({
+        name: 'ECDSA',
+        namedCurve: 'P-256'
+      })
+    }
   }
 
   /**
@@ -311,6 +415,81 @@ class P2PCF extends EventEmitter {
         }
       }
     }
+  }
+
+  async _getNetworkSettings () {
+    await this.init()
+
+    let dtlsFingerprint = null
+    const candidates = []
+    const reflexiveIps = new Set()
+
+    const peerOptions = { iceServers: DEFAULT_STUN_ICE }
+
+    if (this._dtlsCert) {
+      peerOptions.certificates = [this._dtlsCert]
+    }
+
+    const pc = new this._wrtc.RTCPeerConnection(peerOptions)
+    pc.createDataChannel('x')
+
+    const p = new Promise(resolve => {
+      // 5 second timeout
+      setTimeout(() => resolve(), 5000)
+
+      pc.onicecandidate = e => {
+        if (!e.candidate) return resolve()
+
+        if (e.candidate.candidate) {
+          candidates.push(parseCandidate(e.candidate.candidate))
+        }
+      }
+    })
+
+    pc.createOffer().then(offer => {
+      for (const l of offer.sdp.split('\n')) {
+        if (l.indexOf('a=fingerprint') === -1) continue
+        dtlsFingerprint = l.split(' ')[1].trim()
+      }
+
+      pc.setLocalDescription(offer)
+    })
+
+    await p
+
+    pc.close()
+
+    let isSymmetric = false
+    let udpEnabled = false
+
+    // Network is not symmetric if we can find a srflx candidate that has a unique related port
+    /* eslint-disable no-labels */
+    loop: for (const c of candidates) {
+      /* eslint-enable no-labels */
+      if (c[0] !== CANDIDATE_TYPES.srflx) continue
+      udpEnabled = true
+
+      reflexiveIps.add(c[CANDIDATE_IDX.IP])
+
+      for (const d of candidates) {
+        if (d[0] !== CANDIDATE_TYPES.srflx) continue
+        if (c === d) continue
+
+        if (
+          typeof c[CANDIDATE_IDX.RELATED_PORT] === 'number' &&
+          typeof d[CANDIDATE_IDX.RELATED_PORT] === 'number' &&
+          c[CANDIDATE_IDX.RELATED_PORT] === d[CANDIDATE_IDX.RELATED_PORT] &&
+          c[CANDIDATE_IDX.PORT] !== d[CANDIDATE_IDX.PORT]
+        ) {
+          // check port and related port
+          // Symmetric, continue
+          isSymmetric = true
+          break
+        }
+      }
+    }
+
+    return [udpEnabled, isSymmetric, reflexiveIps, dtlsFingerprint]
   }
 }
 

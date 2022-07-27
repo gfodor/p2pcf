@@ -1,29 +1,40 @@
 const test = require('tape')
 
-// let P2PCF
-// if (process.env.BROWSER_TEST) {
-//   P2PCF = require('../p2pcf')
-// } else {
-//   P2PCF = require('../node')
-// }
+let P2PCF
 
-test('hello world', function (t) {
-  // const p2pcf1 = new P2PCF('p2pcf')
+if (process.env.BROWSER_TEST) {
+  P2PCF = require('../p2pcf')
+} else {
+  P2PCF = require('../node')
+}
+
+test('get network settings', async function (t) {
+  const p2pcf1 = new P2PCF('p2pcf')
+  const [
+    udpEnabled,
+    isSymmetric,
+    reflexiveIps,
+    dtlsFingerprint
+  ] = await p2pcf1._getNetworkSettings()
+  t.true(udpEnabled)
+  t.ok(typeof udpEnabled === 'boolean')
+  t.ok(typeof isSymmetric === 'boolean')
+  t.ok(reflexiveIps.size > 0)
+  t.equal(dtlsFingerprint.length, 95)
   t.end()
-  // var p2pcf2 = new p2pcf('p2pcf')
+})
 
+test('basic', async function (t) {
+  // var p2pcf2 = new p2pcf('p2pcf')
   // p2pcf1.on('peerconnect', (peer) => {
   //   p2pcf1.send(peer, 'hello')
   // })
-
   // p2pcf2.on('msg', (peer, msg) => {
   //   t.equal(msg, 'hello')
-
   //   p2pcf1.destroy()
   //   p2pcf2.destroy()
   //   t.end()
   // })
-
   // p2pcf1.start()
   // p2pcf2.start()
 })

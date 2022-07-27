@@ -24,6 +24,7 @@
   "devDependencies": {
     "airtap": "^4.0.4",
     "browserify": "^17.0.0",
+    "get-browser-rtc": "^1.1.0",
     "lint-staged": "^12.3.7",
     "prettier": "^2.7.1",
     "prettier-standard": "^16.4.1",
