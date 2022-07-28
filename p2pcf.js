@@ -6,6 +6,7 @@
 
 const getBrowserRTC = require('get-browser-rtc')
 const EventEmitter = require('events')
+const Peer = require('simple-peer')
 const debug = require('debug')('p2pcf')
 const pako = require('pako')
 const { encode: arrayBufferToBase64 } = require('base64-arraybuffer')
@@ -72,6 +73,46 @@ const iOS = !!ua.match(/iPad/i) || !!ua.match(/iPhone/i)
 const webkit = !!ua.match(/WebKit/i)
 const iOSSafari = !!(iOS && webkit && !ua.match(/CriOS/i))
 const isFirefox = !!(navigator?.userAgent.toLowerCase().indexOf('firefox') > -1)
+
+const removePeerUi = clientId => {
+  document.getElementById(clientId)?.remove()
+}
+
+const initPeerUi = sessionId => {
+  if (document.getElementById(sessionId)) return
+
+  const peerEl = document.createElement('div')
+  peerEl.style = 'display: flex;'
+
+  const name = document.createElement('div')
+  name.innerText = sessionId.substring(0, 5)
+
+  peerEl.appendChild(name)
+
+  const st = document.createElement('div')
+  st.id = `${sessionId}-ice-status`
+  st.style = 'width: 32px; height 32px; background-color: blue;'
+  peerEl.appendChild(st)
+
+  const cst = document.createElement('div')
+  cst.id = `${sessionId}-conn-status`
+  cst.style = 'width: 32px; height 32px; background-color: blue;'
+  peerEl.appendChild(cst)
+
+  const type = document.createElement('div')
+  type.id = `${sessionId}-type`
+  type.innerText = '?'
+  peerEl.appendChild(type)
+
+  const icetype = document.createElement('div')
+  icetype.id = `${sessionId}-ice-type`
+  icetype.innerText = ''
+  peerEl.appendChild(icetype)
+
+  peerEl.id = sessionId
+
+  document.getElementById('peers').appendChild(peerEl)
+}
 
 // parseCandidate from https://github.com/fippo/sdp
 const parseCandidate = line => {
@@ -404,8 +445,7 @@ class P2PCF extends EventEmitter {
       lastReceivedDataTimestamps,
       packageReceivedFromPeers,
       stunIceServers,
-      turnIceServers,
-      wrtc
+      turnIceServers
     } = this
     const [localSessionId, , localSymmetric] = localPeerData
     const localClientId = this.clientId
@@ -430,6 +470,7 @@ class P2PCF extends EventEmitter {
       }
 
       lastReceivedDataTimestamps.set(remoteSessionId, remoteDataTimestamp)
+      initPeerUi(remoteSessionId)
 
       // Peer A is:
       //   - if both not symmetric or both symmetric, whoever has the most recent data is peer A, since we want Peer B created faster,
@@ -519,9 +560,32 @@ class P2PCF extends EventEmitter {
           remoteCandidates
         ] = remotePackage
 
-        const pc = new wrtc.RTCPeerConnection(peerOptions)
-        pc.createDataChannel('p2pcf_signalling')
-        peers.set(remoteSessionId, pc)
+        initPeerUi(remoteSessionId)
+
+        const peer = new Peer({
+          config: peerOptions,
+          initiator: false,
+          iceCompleteTimeout: 3000,
+          sdpTransform: sdp => {
+            const lines = []
+
+            for (const l of sdp.split('\r\n')) {
+              if (l.startsWith('a=ice-ufrag')) {
+                lines.push(`a=ice-ufrag:${localIceUFrag}`)
+              } else if (l.startsWith('a=ice-pwd')) {
+                lines.push(`a=ice-pwd:${localIcePwd}`)
+              } else {
+                lines.push(l)
+              }
+            }
+
+            return lines.join('\r\n')
+          }
+        })
+
+        peers.set(remoteSessionId, peer)
+
+        peer.on('error', e => this._handlePeerError(peer, e))
 
         // Special case if both behind sym NAT or other hole punching isn't working: peer A needs to send its candidates as well.
         const pkg = [
@@ -538,115 +602,37 @@ class P2PCF extends EventEmitter {
 
         const pkgCandidates = pkg[pkg.length - 1]
 
-        const finishIce = () => {
-          if (localPackages.includes(pkg)) return
-          if (pkgCandidates.length === 0) return
-
-          // If hole punch hasn't worked after two seconds, send these candidates back to B to help it punch through.
-          localPackages.push(pkg)
-        }
-
-        pc.onicecandidate = e => {
-          const timeout = setTimeout(finishIce, window ? 5000 : 500)
-
-          if (!e.candidate) {
-            clearTimeout(timeout)
-            return finishIce()
-          }
-
-          if (!e.candidate.candidate) return
+        const initialCandidateSignalling = e => {
+          if (!e.candidate?.candidate) return
           pkgCandidates.push(e.candidate.candidate)
         }
 
-        pc.oniceconnectionstatechange = () => {
-          const iceConnectionState = pc.iceConnectionState
-          const iceGatheringState = pc.iceGatheringState
+        peer.on('signal', initialCandidateSignalling)
 
-          if (iceConnectionState === 'connected') {
-            console.log(
-              isPeerA ? 'A' : 'B',
-              localClientId,
-              localSessionId,
-              'ice connected to',
-              isPeerA ? 'B' : 'A',
-              remoteClientId,
-              remoteSessionId
+        const finishIce = () => {
+          peer.removeListener('signal', initialCandidateSignalling)
+          if (localPackages.includes(pkg)) return
+          if (pkgCandidates.length === 0) return
+
+          localPackages.push(pkg)
+        }
+
+        peer.once('_iceComplete', finishIce)
+
+        peer.on('iceStateChange', e => {
+          console.log('ice state change', e)
+        })
+
+        peer.on('connect', () => {
+          document
+            .getElementById(`${remoteSessionId}-ice-status`)
+            .setAttribute(
+              'style',
+              'width: 32px; height: 32px; background-color: green;'
             )
-          } else if (iceConnectionState === 'failed') {
-            this._removePeerBySessionId(remoteSessionId)
-          }
+        })
 
-          console.log(
-            'iceconnectionstatechange',
-            isPeerA ? 'A' : 'B',
-            localClientId,
-            localSessionId,
-            'to',
-            isPeerA ? 'B' : 'A',
-            remoteClientId,
-            remoteSessionId,
-            iceConnectionState,
-            iceGatheringState
-          )
-        }
-
-        pc.onicegatheringstatechange = () => {
-          const iceConnectionState = pc.iceConnectionState
-          const iceGatheringState = pc.iceGatheringState
-          console.log(
-            'icegatheringstatechange',
-            isPeerA ? 'A' : 'B',
-            localClientId,
-            localSessionId,
-            'to',
-            isPeerA ? 'B' : 'A',
-            remoteClientId,
-            remoteSessionId,
-            iceConnectionState,
-            iceGatheringState
-          )
-        }
-
-        pc.onconnectionstatechange = () => {
-          const connectionState = pc.connectionState
-          if (connectionState === 'connected') {
-            console.log(
-              localClientId,
-              localSessionId,
-              ' full connected to peer B',
-              isPeerA ? 'B' : 'A',
-              remoteClientId,
-              remoteSessionId
-            )
-          } else if (connectionState === 'failed') {
-            this._removePeerBySessionId(remoteSessionId)
-          }
-          console.log(
-            'connectionstatechange',
-            isPeerA ? 'A' : 'B',
-            localClientId,
-            localSessionId,
-            'to',
-            isPeerA ? 'B' : 'A',
-            remoteClientId,
-            remoteSessionId,
-            connectionState
-          )
-        }
-
-        pc.onsignalingstatechange = () => {
-          const signalingState = pc.signalingState
-          console.log(
-            'signalingstatechange',
-            localClientId,
-            localSessionId,
-            ' to ',
-            isPeerA ? 'B' : 'A',
-            remoteClientId,
-            remoteSessionId,
-            signalingState
-          )
-        }
+        peer.on('close', () => this._removePeerBySessionId(remoteSessionId))
 
         const remoteSdp = createSdp(
           true,
@@ -655,39 +641,11 @@ class P2PCF extends EventEmitter {
           remoteDtlsFingerprintBase64
         )
 
-        // console.log('peer A', localSessionId, 'remote offer', remoteSdp)
-        pc.setRemoteDescription({ type: 'offer', sdp: remoteSdp })
+        for (const candidate of remoteCandidates) {
+          peer.signal({ candidate: { candidate, sdpMLineIndex: 0 } })
+        }
 
-        pc.createAnswer().then(answer => {
-          const lines = []
-
-          for (const l of answer.sdp.split('\r\n')) {
-            if (l.startsWith('a=ice-ufrag')) {
-              lines.push(`a=ice-ufrag:${localIceUFrag}`)
-            } else if (l.startsWith('a=ice-pwd')) {
-              lines.push(`a=ice-pwd:${localIcePwd}`)
-            } else {
-              lines.push(l)
-            }
-          }
-
-          // console.log('A local answer', this.sessionId, lines.join('\r\n'))
-          pc.setLocalDescription({ type: 'answer', sdp: lines.join('\r\n') })
-
-          for (const candidate of remoteCandidates) {
-            console.log(
-              localClientId,
-              localSessionId,
-              ' adding candidate ',
-              isPeerA ? 'B' : 'A',
-              remoteClientId,
-              remoteSessionId,
-              candidate
-            )
-
-            pc.addIceCandidate({ candidate, sdpMLineIndex: 0 })
-          }
-        })
+        peer.signal({ type: 'offer', sdp: remoteSdp })
       } else {
         // I am peer B, I need to create a peer first if none exists, and send a package.
         //   - Create PC
@@ -701,12 +659,16 @@ class P2PCF extends EventEmitter {
         //   - Let trickle run, then once trickle finishes send a package for A to pick up = [my session id, my offer sdp, generated ufrag/pwd, dtls fingerprint, ice candidates]
         //   - keep the icecandidate listener active, and add the pfrlx candidates when they arrive (but don't send another package)
         if (!peers.has(remoteSessionId)) {
-          const pc = new wrtc.RTCPeerConnection(peerOptions)
-          pc.createDataChannel('p2pcf_signalling')
-          peers.set(remoteSessionId, pc)
-
           const remoteUfrag = randomstring.generate({ length: 12 })
           const remotePwd = randomstring.generate({ length: 32 })
+          const peer = new Peer({
+            config: peerOptions,
+            iceCompleteTimeout: 3000,
+            initiator: true
+          })
+
+          peers.set(remoteSessionId, peer)
+          peer.on('error', e => this._handlePeerError(peer, e))
 
           // This is the 'package' sent to peer A that it needs to start ICE
           const pkg = [
@@ -723,140 +685,40 @@ class P2PCF extends EventEmitter {
 
           const pkgCandidates = pkg[pkg.length - 1]
 
-          // Peer A posted its reflexive IPs to try to speed up hole punching by B.
-          let remoteSdp = createSdp(
-            false,
-            remoteUfrag,
-            remotePwd,
-            remoteDtlsFingerprintBase64
-          )
-
-          for (let i = 0; i < remoteReflexiveIps.length; i++) {
-            remoteSdp += `a=candidate:0 1 udp ${i + 1} ${
-              remoteReflexiveIps[i]
-            } 30000 typ srflx\r\n`
-          }
-
-          const finishIce = () => {
-            if (localPackages.includes(pkg)) return
-            console.log(
-              localClientId,
-              localSessionId,
-              ' pushing package to ',
-              isPeerA ? 'B' : 'A',
-              remoteClientId,
-              remoteSessionId,
-              pkg
-            )
-            localPackages.push(pkg)
-          }
-
-          pc.onicecandidate = e => {
-            const timeout = setTimeout(finishIce, 5000)
-
+          const initialCandidateSignalling = e => {
             // Push package onto the given package list, so it will be sent in next polling step.
-            if (!e.candidate) {
-              clearTimeout(timeout)
-              return finishIce()
-            }
-
-            if (!e.candidate.candidate) return
+            if (!e.candidate?.candidate) return
             pkgCandidates.push(e.candidate.candidate)
           }
 
-          pc.oniceconnectionstatechange = () => {
-            const iceConnectionState = pc.iceConnectionState
-            const iceGatheringState = pc.iceGatheringState
+          peer.on('signal', initialCandidateSignalling)
 
-            if (iceConnectionState === 'connected') {
-              console.log(
-                localClientId,
-                localSessionId,
-                ' ice connected to ',
-                isPeerA ? 'B' : 'A',
-                remoteClientId,
-                remoteSessionId
+          const finishIce = () => {
+            peer.removeListener('signal', initialCandidateSignalling)
+            if (localPackages.includes(pkg)) return
+            if (pkgCandidates.length === 0) return
+
+            localPackages.push(pkg)
+          }
+
+          peer.once('_iceComplete', finishIce)
+
+          peer.on('close', () => this._removePeerBySessionId(remoteSessionId))
+
+          peer.on('connect', () => {
+            document
+              .getElementById(`${remoteSessionId}-ice-status`)
+              .setAttribute(
+                'style',
+                'width: 32px; height: 32px; background-color: green;'
               )
-            } else if (iceConnectionState === 'failed') {
-              this._removePeerBySessionId(remoteSessionId)
-            }
+          })
 
-            console.log(
-              'iceconnectionstatechange',
-              isPeerA ? 'A' : 'B',
-              localClientId,
-              localSessionId,
-              ' to ',
-              isPeerA ? 'B' : 'A',
-              remoteClientId,
-              remoteSessionId,
-              iceConnectionState,
-              iceGatheringState
-            )
-          }
+          const enqueuePackageFromOffer = e => {
+            if (e.type !== 'offer') return
+            peer.removeListener('signal', enqueuePackageFromOffer)
 
-          pc.onicegatheringstatechange = () => {
-            const iceConnectionState = pc.iceConnectionState
-            const iceGatheringState = pc.iceGatheringState
-            console.log(
-              'icegatheringstatechange',
-              localClientId,
-              localSessionId,
-              ' to ',
-              isPeerA ? 'B' : 'A',
-              remoteClientId,
-              remoteSessionId,
-              iceConnectionState,
-              iceGatheringState
-            )
-          }
-
-          pc.onconnectionstatechange = () => {
-            const connectionState = pc.connectionState
-            console.log(
-              'connectionstatechange',
-              localClientId,
-              localSessionId,
-              ' to ',
-              isPeerA ? 'B' : 'A',
-              remoteClientId,
-              remoteSessionId,
-              connectionState
-            )
-
-            if (connectionState === 'connected') {
-              console.log(
-                localClientId,
-                localSessionId,
-                ' full connected to ',
-                isPeerA ? 'B' : 'A',
-                remoteClientId,
-                remoteSessionId
-              )
-            } else if (connectionState === 'failed') {
-              this._removePeerBySessionId(remoteSessionId)
-            }
-          }
-
-          pc.onsignalingstatechange = () => {
-            const signalingState = pc.signalingState
-            console.log(
-              'signalingstatechange',
-              localClientId,
-              localSessionId,
-              ' to ',
-              isPeerA ? 'B' : 'A',
-              remoteClientId,
-              remoteSessionId,
-              signalingState
-            )
-          }
-
-          pc.createOffer().then(offer => {
-            pc.setLocalDescription(offer)
-            // console.log('B local offer', offer.sdp)
-
-            for (const l of offer.sdp.split('\r\n')) {
+            for (const l of e.sdp.split('\r\n')) {
               switch (l.split(':')[0]) {
                 case 'a=ice-ufrag':
                   pkg[2] = l.substring(12)
@@ -870,13 +732,29 @@ class P2PCF extends EventEmitter {
               }
             }
 
-            if (!delaySetRemoteUntilReceiveCandidates) {
-              // console.log('B remote answer', remoteSdp)
-              pc.setRemoteDescription({ type: 'answer', sdp: remoteSdp })
-            } else {
-              pc._pendingRemoteSdp = remoteSdp
+            // Peer A posted its reflexive IPs to try to speed up hole punching by B.
+            let remoteSdp = createSdp(
+              false,
+              remoteUfrag,
+              remotePwd,
+              remoteDtlsFingerprintBase64
+            )
+
+            for (let i = 0; i < remoteReflexiveIps.length; i++) {
+              remoteSdp += `a=candidate:0 1 udp ${i + 1} ${
+                remoteReflexiveIps[i]
+              } 30000 typ srflx\r\n`
             }
-          })
+
+            if (!delaySetRemoteUntilReceiveCandidates) {
+              peer.signal({ type: 'answer', sdp: remoteSdp })
+            } else {
+              peer._pendingRemoteSdp = remoteSdp
+            }
+          }
+
+          peer.once('signal', enqueuePackageFromOffer)
+          peer.negotiate()
         }
 
         if (!remotePackage) continue
@@ -886,12 +764,14 @@ class P2PCF extends EventEmitter {
         const [, , , , , , , , remoteCandidates] = remotePackage
         if (packageReceivedFromPeers.has(remoteSessionId)) continue
         if (!peers.has(remoteSessionId)) continue
+        initPeerUi(remoteSessionId)
 
-        const pc = peers.get(remoteSessionId)
+        const peer = peers.get(remoteSessionId)
+
         if (
           delaySetRemoteUntilReceiveCandidates &&
-          !pc.remoteDescription &&
-          pc._pendingRemoteSdp
+          !peer._pc.remoteDescription &&
+          peer._pendingRemoteSdp
         ) {
           console.log(
             localClientId,
@@ -903,73 +783,25 @@ class P2PCF extends EventEmitter {
             remoteCandidates.length
           )
 
-          pc.setRemoteDescription({
-            type: 'answer',
-            sdp: pc._pendingRemoteSdp
-          }).then(() => {
-            delete pc._pendingRemoteSdp
-
-            console.log(
-              isPeerA ? 'A' : 'B',
-              localClientId,
-              localSessionId,
-              ' checking connection state to ',
-              isPeerA ? 'B' : 'A',
-              remoteClientId,
-              remoteSessionId,
-              pc.iceConnectionState
-            )
-
-            if (pc.iceConnectionState !== 'connected') {
-              for (const candidate of remoteCandidates) {
-                console.log('B', candidate)
-                pc.addIceCandidate({ candidate, sdpMLineIndex: 0 })
-              }
+          if (!peer.connected) {
+            for (const candidate of remoteCandidates) {
+              peer.signal({ candidate: { candidate, sdpMLineIndex: 0 } })
             }
+          }
 
-            packageReceivedFromPeers.add(remoteSessionId)
-          })
-
+          peer.signal({ type: 'answer', sdp: peer._pendingRemoteSdp })
+          delete peer._pendingRemoteSdp
           packageReceivedFromPeers.add(remoteSessionId)
         }
 
         if (
           !delaySetRemoteUntilReceiveCandidates &&
-          pc.remoteDescription &&
+          peer._pc.remoteDescription &&
           remoteCandidates.length > 0
         ) {
-          console.log(
-            localClientId,
-            localSessionId,
-            ' 1add remote candidates from ',
-            isPeerA ? 'B' : 'A',
-            remoteClientId,
-            remoteSessionId,
-            remoteCandidates.length
-          )
-
-          console.log(
-            localClientId,
-            localSessionId,
-            ' checking connection state to ',
-            isPeerA ? 'B' : 'A',
-            remoteClientId,
-            remoteSessionId,
-            pc.iceConnectionState
-          )
-
-          if (pc.iceConnectionState !== 'connected') {
+          if (!peer.connected) {
             for (const candidate of remoteCandidates) {
-              console.log(
-                localClientId,
-                localSessionId,
-                ' 2add remote candidate from ',
-                isPeerA ? 'B' : 'A',
-                remoteClientId,
-                remoteSessionId,
-                candidate
-              )
-              pc.addIceCandidate({ candidate, sdpMLineIndex: 0 })
+              peer.signal({ candidate: { candidate, sdpMLineIndex: 0 } })
             }
           }
 
@@ -981,6 +813,7 @@ class P2PCF extends EventEmitter {
     const remoteSessionIds = remotePeerDatas.map(p => p[0])
 
     // Remove all peers no longer in the peer list.
+    // TODO deal with simple peer
     for (const sessionId of peers.keys()) {
       if (remoteSessionIds.includes(sessionId)) continue
       console.log(
@@ -991,6 +824,7 @@ class P2PCF extends EventEmitter {
         ' removing',
         JSON.stringify(remoteSessionIds)
       )
+
       this._removePeerBySessionId(sessionId)
     }
   }
@@ -1172,11 +1006,10 @@ class P2PCF extends EventEmitter {
   async _removePeerBySessionId (sessionId) {
     const { peers, packageReceivedFromPeers, packages } = this
     if (!peers.has(sessionId)) return
-    console.log(this.clientId, this.sessionId, 'closing', sessionId)
-    console.trace()
 
     const peer = peers.get(sessionId)
-    peer.close()
+    peer.destroy()
+    removePeerUi(sessionId)
     packageReceivedFromPeers.delete(sessionId)
     peers.delete(sessionId)
 
@@ -1453,6 +1286,17 @@ class P2PCF extends EventEmitter {
     }
 
     return [udpEnabled, isSymmetric, reflexiveIps, dtlsFingerprint]
+  }
+
+  _handlePeerError (peer, err) {
+    if (
+      err.errorDetail === 'sctp-failure' &&
+      err.message.indexOf('User-Initiated Abort') >= 0
+    ) {
+      return // Benign shutdown
+    }
+
+    console.error(err)
   }
 }
 
