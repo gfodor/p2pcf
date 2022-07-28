@@ -7,6 +7,7 @@ if (!document.location.hash) {
 }
 
 const p2pcf = new P2PCF('testguy', document.location.hash.substring(1))
+window.p2pcf = p2pcf
 
 const removePeerUi = clientId => {
   document.getElementById(clientId)?.remove()
@@ -35,6 +36,7 @@ const addMessage = message => {
 }
 
 p2pcf.on('peerconnect', peer => {
+  console.log('Peer connect', peer.id, peer)
   addPeerUi(peer.id)
 })
 
@@ -59,7 +61,7 @@ export const waitForEvent = function (eventName, eventObj) {
 
 const go = () => {
   document.getElementById('session-id').innerText =
-    p2pcf.sessionId.substring(0, 5) + ':'
+    p2pcf.sessionId.substring(0, 5) + '@' + p2pcf.roomId + ':'
 
   document.getElementById('send-button').addEventListener('click', () => {
     const box = document.getElementById('send-box')

@@ -141,7 +141,6 @@ class P2PCF extends EventEmitter {
     this.packages = []
     this.dataTimestamp = null
     this.lastPackages = null
-    this.packageReceivedFromPeers = new Set()
     this.lastReceivedDataTimestamps = new Map()
     this.packageReceivedFromPeers = new Set()
     this.startedAtTimestamp = null
@@ -706,7 +705,7 @@ class P2PCF extends EventEmitter {
     // TODO deal with simple peer
     for (const [sessionId, peer] of peers.entries()) {
       if (remoteSessionIds.includes(sessionId)) continue
-      this._removePeer(peer)
+      this._removePeer(peer, true)
     }
   }
 
@@ -747,7 +746,10 @@ class P2PCF extends EventEmitter {
         this.packages.length = 0
 
         for (const peer of this.peers.values()) {
-          this._removePeer(peer)
+          this._removePeer(peer, true)
+
+          // Re-process the last incoming messages from all peers too right away
+          this.lastReceivedDataTimestamps.delete(peer.id)
         }
 
         this.dataTimestamp = null
@@ -772,8 +774,8 @@ class P2PCF extends EventEmitter {
    * Remove a peer from the list if all channels are closed
    * @param integer id Peer ID
    */
-  _removePeer (peer) {
-    const { packages, peers } = this
+  _removePeer (peer, destroy = false) {
+    const { packageReceivedFromPeers, packages, peers } = this
     if (!peers.has(peer.id)) return
 
     for (let i = 0; i < packages.length; i++) {
@@ -786,7 +788,13 @@ class P2PCF extends EventEmitter {
       packages.splice(packages.indexOf(null), 1)
     }
 
+    packageReceivedFromPeers.delete(peer.id)
+
     peers.delete(peer.id)
+
+    if (destroy) {
+      peer.destroy()
+    }
 
     this.emit('peerclose', peer)
   }
@@ -948,10 +956,6 @@ class P2PCF extends EventEmitter {
     return target
   }
 
-  _destroyChunks (msgID) {
-    this.msgChunks.delete(msgID)
-  }
-
   _updateConnectedSessions () {
     this.connectedSessions.length = 0
 
@@ -1074,7 +1078,7 @@ class P2PCF extends EventEmitter {
           const msg = this._chunkHandler(data, messageId, chunkId, last)
           if (last) {
             this.emit('msg', peer, msg)
-            this._destroyChunks(messageId)
+            this.msgChunks.delete(messageId)
           }
         } catch (e) {
           console.error(e)
