@@ -225,6 +225,7 @@ class P2PCF extends EventEmitter {
 
     if (finish) {
       if (this.finished) return
+      if (!this.deleteKey) return
       this.finished = true
     } else {
       if (this.nextStepTime > now) return
@@ -610,6 +611,7 @@ class P2PCF extends EventEmitter {
 
           const finishIce = () => {
             peer.removeListener('signal', initialCandidateSignalling)
+
             if (localPackages.includes(pkg)) return
             if (pkgCandidates.length === 0) return
 
@@ -773,10 +775,6 @@ class P2PCF extends EventEmitter {
     }
   }
 
-  /**
-   * Remove a peer from the list if all channels are closed
-   * @param integer id Peer ID
-   */
   _removePeer (peer, destroy = false) {
     const { packageReceivedFromPeers, packages, peers } = this
     if (!peers.has(peer.id)) return
@@ -918,10 +916,8 @@ class P2PCF extends EventEmitter {
       this.destroyOnUnload = null
     }
 
-    for (const channels of this.peers.values()) {
-      for (const peer of channels.values()) {
-        peer.destroy()
-      }
+    for (const peer of this.peers.values()) {
+      peer.destroy()
     }
   }
 

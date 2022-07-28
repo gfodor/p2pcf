@@ -11313,6 +11313,8 @@ var require_p2pcf = __commonJS({
         if (finish) {
           if (this.finished)
             return;
+          if (!this.deleteKey)
+            return;
           this.finished = true;
         } else {
           if (this.nextStepTime > now)
@@ -11794,10 +11796,8 @@ var require_p2pcf = __commonJS({
           }
           this.destroyOnUnload = null;
         }
-        for (const channels of this.peers.values()) {
-          for (const peer of channels.values()) {
-            peer.destroy();
-          }
+        for (const peer of this.peers.values()) {
+          peer.destroy();
         }
       }
       _chunkHandler(data, messageId, chunkId) {
