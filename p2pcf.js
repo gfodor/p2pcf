@@ -583,9 +583,12 @@ class P2PCF extends EventEmitter {
           }
         })
 
-        peers.set(remoteSessionId, peer)
+        peer.id = remoteSessionId
+        peer.client_id = remoteClientId
 
-        peer.on('error', e => this._handlePeerError(peer, e))
+        this._wireUpCommonPeerEvents(peer)
+
+        peers.set(peer.id, peer)
 
         // Special case if both behind sym NAT or other hole punching isn't working: peer A needs to send its candidates as well.
         const pkg = [
@@ -632,8 +635,6 @@ class P2PCF extends EventEmitter {
             )
         })
 
-        peer.on('close', () => this._removePeerBySessionId(remoteSessionId))
-
         const remoteSdp = createSdp(
           true,
           remoteIceUFrag,
@@ -667,8 +668,12 @@ class P2PCF extends EventEmitter {
             initiator: true
           })
 
-          peers.set(remoteSessionId, peer)
-          peer.on('error', e => this._handlePeerError(peer, e))
+          peer.id = remoteSessionId
+          peer.client_id = remoteClientId
+
+          this._wireUpCommonPeerEvents(peer)
+
+          peers.set(peer.id, peer)
 
           // This is the 'package' sent to peer A that it needs to start ICE
           const pkg = [
@@ -702,8 +707,6 @@ class P2PCF extends EventEmitter {
           }
 
           peer.once('_iceComplete', finishIce)
-
-          peer.on('close', () => this._removePeerBySessionId(remoteSessionId))
 
           peer.on('connect', () => {
             document
@@ -814,18 +817,9 @@ class P2PCF extends EventEmitter {
 
     // Remove all peers no longer in the peer list.
     // TODO deal with simple peer
-    for (const sessionId of peers.keys()) {
+    for (const [sessionId, peer] of peers.entries()) {
       if (remoteSessionIds.includes(sessionId)) continue
-      console.log(
-        'Missing',
-        sessionId,
-        'on',
-        this.clientId,
-        ' removing',
-        JSON.stringify(remoteSessionIds)
-      )
-
-      this._removePeerBySessionId(sessionId)
+      this._removePeer(peer)
     }
   }
 
@@ -881,8 +875,8 @@ class P2PCF extends EventEmitter {
           newReflexiveIps
         )
 
-        for (const sessionId of this.peers.keys()) {
-          this._removePeerBySessionId(sessionId)
+        for (const peer of this.peers.values()) {
+          this._removePeer(peer)
         }
 
         this.dataTimestamp = null
@@ -901,86 +895,6 @@ class P2PCF extends EventEmitter {
     for (const ev of iOSSafari ? ['pagehide'] : ['beforeunload', 'unload']) {
       window.addEventListener(ev, this.destroyOnUnload)
     }
-
-    // this.on('peer', peer => {
-    //   let newpeer = false
-    //   if (!this.peers.has(peer.id)) {
-    //     newpeer = true
-    //     this.peers.set(peer.id, new Map())
-    //     this.responseWaiting.set(peer.id, new Map())
-    //   }
-    //   peer.on('connect', () => {
-    //     /**
-    //      * Multiple data channels to one peer is possible
-    //      * The `peer` object actually refers to a peer with a data channel. Even though it may have same `id` (peerID) property, the data channel will be different. Different trackers giving the same "peer" will give the `peer` object with different channels.
-    //      * We will store two channels in case one of them fails
-    //      * A peer is removed if all data channels become unavailable
-    //      */
-    //     const channels = this.peers.get(peer.id)
-    //     let connectedChannelCount = 0
-    //     for (const peer of channels.values()) {
-    //       if (!peer.connected) continue
-    //       connectedChannelCount++
-    //     }
-    //     if (connectedChannelCount === 0) {
-    //       channels.set(peer.channelName, peer)
-    //       if (newpeer) {
-    //         this.emit('peerconnect', peer)
-    //       }
-    //     } else {
-    //       peer.destroy()
-    //     }
-    //     this._updateConnectedSessions()
-    //   })
-    //   peer.on('data', data => {
-    //     this.emit('data', peer, data)
-    //     let messageId = null
-    //     let u16 = null
-    //     if (data.length >= CHUNK_HEADER_LENGTH_BYTES) {
-    //       u16 = new Uint16Array(
-    //         data.buffer,
-    //         data.byteOffset,
-    //         CHUNK_HEADER_LENGTH_BYTES / 2
-    //       )
-    //       if (u16[0] === CHUNK_MAGIC_WORD) {
-    //         messageId = u16[1]
-    //       }
-    //     }
-    //     if (messageId !== null) {
-    //       try {
-    //         const chunkId = u16[2]
-    //         const last = u16[3] !== 0
-    //         const msg = this._chunkHandler(data, messageId, chunkId, last)
-    //         if (last) {
-    //           /**
-    //            * If there's someone waiting for a response, call them
-    //            */
-    //           if (this.responseWaiting.get(peer.id).has(messageId)) {
-    //             this.responseWaiting.get(peer.id).get(messageId)([peer, msg])
-    //             this.responseWaiting.get(peer.id).delete(messageId)
-    //           } else {
-    //             this.emit('msg', peer, msg)
-    //           }
-    //           this._destroyChunks(messageId)
-    //         }
-    //       } catch (e) {
-    //         console.error(e)
-    //       }
-    //     } else {
-    //       this.emit('msg', peer, data)
-    //     }
-    //   })
-    //   peer.on('error', err => {
-    //     this._removePeer(peer)
-    //     this._updateConnectedSessions()
-    //     debug('Error in connection : ' + err)
-    //   })
-    //   peer.on('close', () => {
-    //     this._removePeer(peer)
-    //     this._updateConnectedSessions()
-    //     debug('Connection closed with ' + peer.id)
-    //   })
-    // })
   }
 
   /**
@@ -988,33 +902,13 @@ class P2PCF extends EventEmitter {
    * @param integer id Peer ID
    */
   _removePeer (peer) {
-    if (!this.peers.has(peer.id)) {
-      return false
-    }
+    const { packages, peers, responseWaiting } = this
+    if (!peers.has(peer.id)) return
 
-    this.peers.get(peer.id).delete(peer.channelName)
-
-    // All data channels are gone. Peer lost
-    if (this.peers.get(peer.id).size === 0) {
-      this.emit('peerclose', peer)
-
-      this.responseWaiting.delete(peer.id)
-      this.peers.delete(peer.id)
-    }
-  }
-
-  async _removePeerBySessionId (sessionId) {
-    const { peers, packageReceivedFromPeers, packages } = this
-    if (!peers.has(sessionId)) return
-
-    const peer = peers.get(sessionId)
-    peer.destroy()
-    removePeerUi(sessionId)
-    packageReceivedFromPeers.delete(sessionId)
-    peers.delete(sessionId)
+    removePeerUi(peer.id)
 
     for (let i = 0; i < packages.length; i++) {
-      if (packages[i][0] === sessionId) {
+      if (packages[i][0] === peer.id) {
         packages[i] = null
       }
     }
@@ -1022,6 +916,11 @@ class P2PCF extends EventEmitter {
     while (packages.indexOf(null) >= 0) {
       packages.splice(packages.indexOf(null), 1)
     }
+
+    responseWaiting.delete(peer.id)
+    peers.delete(peer.id)
+
+    this.emit('peerclose', peer)
   }
 
   /**
@@ -1204,12 +1103,10 @@ class P2PCF extends EventEmitter {
   _updateConnectedSessions () {
     this.connectedSessions.length = 0
 
-    for (const [peerId, channels] of this.peers) {
-      for (const peer of channels.values()) {
-        if (peer.connected) {
-          this.connectedSessions.push(peerId)
-          continue
-        }
+    for (const [sessionId, peer] of this.peers) {
+      if (peer.connected) {
+        this.connectedSessions.push(sessionId)
+        continue
       }
     }
   }
@@ -1297,6 +1194,62 @@ class P2PCF extends EventEmitter {
     }
 
     console.error(err)
+  }
+
+  _wireUpCommonPeerEvents (peer) {
+    peer.on('connect', () => {
+      this.emit('peerconnect', peer)
+      this._updateConnectedSessions()
+    })
+
+    peer.on('data', data => {
+      this.emit('data', peer, data)
+      let messageId = null
+      let u16 = null
+      if (data.length >= CHUNK_HEADER_LENGTH_BYTES) {
+        u16 = new Uint16Array(
+          data.buffer,
+          data.byteOffset,
+          CHUNK_HEADER_LENGTH_BYTES / 2
+        )
+        if (u16[0] === CHUNK_MAGIC_WORD) {
+          messageId = u16[1]
+        }
+      }
+      if (messageId !== null) {
+        try {
+          const chunkId = u16[2]
+          const last = u16[3] !== 0
+          const msg = this._chunkHandler(data, messageId, chunkId, last)
+          if (last) {
+            /**
+             * If there's someone waiting for a response, call them
+             */
+            if (this.responseWaiting.get(peer.id).has(messageId)) {
+              this.responseWaiting.get(peer.id).get(messageId)([peer, msg])
+              this.responseWaiting.get(peer.id).delete(messageId)
+            } else {
+              this.emit('msg', peer, msg)
+            }
+            this._destroyChunks(messageId)
+          }
+        } catch (e) {
+          console.error(e)
+        }
+      } else {
+        this.emit('msg', peer, data)
+      }
+    })
+
+    peer.on('error', () => {
+      this._removePeer(peer)
+      this._updateConnectedSessions()
+    })
+
+    peer.on('close', () => {
+      this._removePeer(peer)
+      this._updateConnectedSessions()
+    })
   }
 }
 
