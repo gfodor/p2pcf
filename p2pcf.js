@@ -6,7 +6,8 @@
 
 /*
  * Known issues:
- * - ice reneg fails in firefox when iphone joins first (as the initiator, peer B) on TURN when adding track
+ * - ice reneg fails in firefox and chrome when iphone joins first (as the initiator, peer B) on TURN when adding track
+ *   - might be the public TURN server having issues
  */
 const getBrowserRTC = require('get-browser-rtc')
 const EventEmitter = require('events')
