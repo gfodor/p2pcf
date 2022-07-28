@@ -16,7 +16,8 @@ const randomstring = require('randomstring')
 
 const hexToBase64 = hex => arrayBufferToBase64(hexToBytes(hex))
 
-const MAX_MESSAGE_LENGTH_BYTES = 20
+// Based on Chrome
+const MAX_MESSAGE_LENGTH_BYTES = 16000
 
 const CHUNK_HEADER_LENGTH_BYTES = 12 // 2 magic, 2 msg id, 2 chunk id, 2 for done bit, 4 for length
 const CHUNK_MAGIC_WORD = 8121
