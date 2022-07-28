@@ -11913,7 +11913,6 @@ var require_p2pcf = __commonJS({
               }
             }
             if (isSignalMessage) {
-              console.log("a", data[data.length - 1]);
               const u8 = new Uint8Array(
                 data.buffer,
                 data.byteOffset + SIGNAL_MESSAGE_HEADER_WORDS.length * 2
@@ -11922,7 +11921,6 @@ var require_p2pcf = __commonJS({
               if (payload.endsWith("\0")) {
                 payload = payload.substring(0, payload.length - 1);
               }
-              console.log("signal in", payload);
               peer.signal(payload);
               return;
             }
