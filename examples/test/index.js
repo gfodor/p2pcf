@@ -1,5 +1,12 @@
 import P2PCF from './p2pcf.js'
-const p2pcf = new P2PCF('testguy', 'room8888')
+
+if (!document.location.hash) {
+  document.location =
+    document.location.toString() +
+    `#room-example-${Math.floor(Math.random() * 100000)}`
+}
+
+const p2pcf = new P2PCF('testguy', document.location.hash.substring(1))
 
 const removePeerUi = clientId => {
   document.getElementById(clientId)?.remove()
@@ -51,6 +58,9 @@ export const waitForEvent = function (eventName, eventObj) {
 }
 
 const go = () => {
+  document.getElementById('session-id').innerText =
+    p2pcf.sessionId.substring(0, 5) + ':'
+
   document.getElementById('send-button').addEventListener('click', () => {
     const box = document.getElementById('send-box')
     addMessage(p2pcf.sessionId.substring(0, 5) + ': ' + box.value)
