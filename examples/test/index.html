@@ -2,12 +2,32 @@
   <head>
     <script type="module" src="index.js"></script>
     <style>
+      body {
+        font-family: Arial, sans-serif;
+      }
+
       #peers div { padding: 8px; font-size: 24px; }
-      #client { font-size: 28 }
+      #messages div { padding: 8px; font-size: 24px; }
     </style>
   </head>
   <body style="display: flex; flex-direction: column;">
-    <div id="peers" style="display: flex; flex-direction: column;">
+    <div style="display: flex; flex-direction: row;">
+      <div style="display: flex; flex-direction: column; min-width: 200px;">
+        Peers:
+        <div id="peers" style="display: flex; flex-direction: column;">
+        </div>
+      </div>
+      <div style="display: flex; flex-direction: column;">
+        Messages:
+        <div id="messages" style="display: flex; flex-direction: column;">
+        </div>
+      </div>
+    </div>
+    <div style="padding-top: 24px;">
+      <form onsubmit="return false;">
+        <input id="send-box" type="text"/>
+        <button type="submit" id="send-button">Send</button>
+      </form>
     </div>
   </body>
 </html>

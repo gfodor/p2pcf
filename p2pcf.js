@@ -16,7 +16,7 @@ const randomstring = require('randomstring')
 
 const hexToBase64 = hex => arrayBufferToBase64(hexToBytes(hex))
 
-const MAX_MESSAGE_LENGTH_BYTES = 16000
+const MAX_MESSAGE_LENGTH_BYTES = 20
 
 const CHUNK_HEADER_LENGTH_BYTES = 12 // 2 magic, 2 msg id, 2 chunk id, 2 for done bit, 4 for length
 const CHUNK_MAGIC_WORD = 8121
@@ -73,46 +73,6 @@ const iOS = !!ua.match(/iPad/i) || !!ua.match(/iPhone/i)
 const webkit = !!ua.match(/WebKit/i)
 const iOSSafari = !!(iOS && webkit && !ua.match(/CriOS/i))
 const isFirefox = !!(navigator?.userAgent.toLowerCase().indexOf('firefox') > -1)
-
-const removePeerUi = clientId => {
-  document.getElementById(clientId)?.remove()
-}
-
-const initPeerUi = sessionId => {
-  if (document.getElementById(sessionId)) return
-
-  const peerEl = document.createElement('div')
-  peerEl.style = 'display: flex;'
-
-  const name = document.createElement('div')
-  name.innerText = sessionId.substring(0, 5)
-
-  peerEl.appendChild(name)
-
-  const st = document.createElement('div')
-  st.id = `${sessionId}-ice-status`
-  st.style = 'width: 32px; height 32px; background-color: blue;'
-  peerEl.appendChild(st)
-
-  const cst = document.createElement('div')
-  cst.id = `${sessionId}-conn-status`
-  cst.style = 'width: 32px; height 32px; background-color: blue;'
-  peerEl.appendChild(cst)
-
-  const type = document.createElement('div')
-  type.id = `${sessionId}-type`
-  type.innerText = '?'
-  peerEl.appendChild(type)
-
-  const icetype = document.createElement('div')
-  icetype.id = `${sessionId}-ice-type`
-  icetype.innerText = ''
-  peerEl.appendChild(icetype)
-
-  peerEl.id = sessionId
-
-  document.getElementById('peers').appendChild(peerEl)
-}
 
 // parseCandidate from https://github.com/fippo/sdp
 const parseCandidate = line => {
@@ -174,7 +134,6 @@ class P2PCF extends EventEmitter {
 
     this.peers = new Map()
     this.msgChunks = new Map()
-    this.responseWaiting = new Map()
     this.connectedSessions = []
     this.clientId = clientId
     this.roomId = roomId
@@ -448,7 +407,7 @@ class P2PCF extends EventEmitter {
       turnIceServers
     } = this
     const [localSessionId, , localSymmetric] = localPeerData
-    const localClientId = this.clientId
+
     const now = new Date().getTime()
 
     for (const remotePeerData of remotePeerDatas) {
@@ -470,7 +429,6 @@ class P2PCF extends EventEmitter {
       }
 
       lastReceivedDataTimestamps.set(remoteSessionId, remoteDataTimestamp)
-      initPeerUi(remoteSessionId)
 
       // Peer A is:
       //   - if both not symmetric or both symmetric, whoever has the most recent data is peer A, since we want Peer B created faster,
@@ -482,29 +440,6 @@ class P2PCF extends EventEmitter {
             ? localSessionId > remoteSessionId
             : localStartedAtTimestamp > remoteStartedAtTimestamp
           : localSymmetric
-
-      console.log(
-        localSymmetric === remoteSymmetric,
-        localStartedAtTimestamp === remoteStartedAtTimestamp,
-        localSessionId > remoteSessionId,
-        localStartedAtTimestamp > remoteStartedAtTimestamp,
-
-        'Peer type :',
-        isPeerA ? 'A' : 'B',
-        ':',
-        this.clientId,
-        this.sessionId,
-        'connecting with',
-        remoteClientId,
-        remoteSessionId,
-        ':',
-        localSymmetric,
-        remoteSymmetric,
-        localSessionId,
-        remoteSessionId,
-        localStartedAtTimestamp,
-        remoteStartedAtTimestamp
-      )
 
       // If either side is symmetric, use TURN and hope we avoid connecting via relays
       // We can't just use TURN if both sides are symmetric because one side might be port restricted and hence won't connect without a relay.
@@ -524,19 +459,6 @@ class P2PCF extends EventEmitter {
       if (isPeerA) {
         if (peers.has(remoteSessionId)) continue
         if (!remotePackage) continue
-
-        if (remotePackage) {
-          console.log(
-            isPeerA ? 'A' : 'B',
-            localClientId,
-            localSessionId,
-            'received from ',
-            isPeerA ? 'B' : 'A',
-            remoteClientId,
-            remoteSessionId,
-            remotePackage
-          )
-        }
 
         // If we already added the candidates from B, skip. This check is not strictly necessary given the peer will exist.
         if (packageReceivedFromPeers.has(remoteSessionId)) continue
@@ -559,8 +481,6 @@ class P2PCF extends EventEmitter {
           ,
           remoteCandidates
         ] = remotePackage
-
-        initPeerUi(remoteSessionId)
 
         const peer = new Peer({
           config: peerOptions,
@@ -621,19 +541,6 @@ class P2PCF extends EventEmitter {
         }
 
         peer.once('_iceComplete', finishIce)
-
-        peer.on('iceStateChange', e => {
-          console.log('ice state change', e)
-        })
-
-        peer.on('connect', () => {
-          document
-            .getElementById(`${remoteSessionId}-ice-status`)
-            .setAttribute(
-              'style',
-              'width: 32px; height: 32px; background-color: green;'
-            )
-        })
 
         const remoteSdp = createSdp(
           true,
@@ -708,15 +615,6 @@ class P2PCF extends EventEmitter {
 
           peer.once('_iceComplete', finishIce)
 
-          peer.on('connect', () => {
-            document
-              .getElementById(`${remoteSessionId}-ice-status`)
-              .setAttribute(
-                'style',
-                'width: 32px; height: 32px; background-color: green;'
-              )
-          })
-
           const enqueuePackageFromOffer = e => {
             if (e.type !== 'offer') return
             peer.removeListener('signal', enqueuePackageFromOffer)
@@ -767,7 +665,6 @@ class P2PCF extends EventEmitter {
         const [, , , , , , , , remoteCandidates] = remotePackage
         if (packageReceivedFromPeers.has(remoteSessionId)) continue
         if (!peers.has(remoteSessionId)) continue
-        initPeerUi(remoteSessionId)
 
         const peer = peers.get(remoteSessionId)
 
@@ -776,16 +673,6 @@ class P2PCF extends EventEmitter {
           !peer._pc.remoteDescription &&
           peer._pendingRemoteSdp
         ) {
-          console.log(
-            localClientId,
-            localSessionId,
-            ' 3add remote candidates from ',
-            isPeerA ? 'B' : 'A',
-            remoteClientId,
-            remoteSessionId,
-            remoteCandidates.length
-          )
-
           if (!peer.connected) {
             for (const candidate of remoteCandidates) {
               peer.signal({ candidate: { candidate, sdpMLineIndex: 0 } })
@@ -859,22 +746,6 @@ class P2PCF extends EventEmitter {
         // Network reset, clear all peers
         this.packages.length = 0
 
-        console.log(
-          newUdpEnabled !== this.udpEnabled,
-          newIsSymmetric !== this.isSymmetric,
-          newDtlsFingerprint !== this.dtlsFingerprint,
-          [...this.reflexiveIps].sort().join(' ') !==
-            [...newReflexiveIps].sort().join(' '),
-          this.udpEnabled,
-          newUdpEnabled,
-          this.isSymmetric,
-          newIsSymmetric,
-          this.dtlsFingerprint,
-          newDtlsFingerprint,
-          this.reflexiveIps,
-          newReflexiveIps
-        )
-
         for (const peer of this.peers.values()) {
           this._removePeer(peer)
         }
@@ -902,10 +773,8 @@ class P2PCF extends EventEmitter {
    * @param integer id Peer ID
    */
   _removePeer (peer) {
-    const { packages, peers, responseWaiting } = this
+    const { packages, peers } = this
     if (!peers.has(peer.id)) return
-
-    removePeerUi(peer.id)
 
     for (let i = 0; i < packages.length; i++) {
       if (packages[i][0] === peer.id) {
@@ -917,7 +786,6 @@ class P2PCF extends EventEmitter {
       packages.splice(packages.indexOf(null), 1)
     }
 
-    responseWaiting.delete(peer.id)
     peers.delete(peer.id)
 
     this.emit('peerclose', peer)
@@ -961,27 +829,6 @@ class P2PCF extends EventEmitter {
         messageId = Math.floor(Math.random() * 256 * 128)
       }
 
-      try {
-        /**
-         * Maybe peer channel is closed, so use a different channel if available
-         * Array should atleast have one channel, otherwise peer connection is closed
-         */
-        if (!peer.connected) {
-          for (const p of this.peers.get(peer.id).values()) {
-            if (!p.connected) continue
-            peer = p
-            break
-          }
-        }
-
-        if (!this.responseWaiting.has(peer.id)) {
-          this.responseWaiting.set(peer.id, new Map())
-        }
-        this.responseWaiting.get(peer.id).set(messageId, resolve)
-      } catch (e) {
-        return reject(Error('Connection to peer closed' + e))
-      }
-
       if (messageId !== null) {
         for (
           let offset = 0, chunkId = 0;
@@ -992,7 +839,13 @@ class P2PCF extends EventEmitter {
             CHUNK_MAX_LENGTH_BYTES,
             dataArrBuffer.byteLength - offset
           )
-          const buf = new ArrayBuffer(CHUNK_HEADER_LENGTH_BYTES + chunkSize)
+          let bufSize = CHUNK_HEADER_LENGTH_BYTES + chunkSize
+
+          while (bufSize % 4 !== 0) {
+            bufSize++
+          }
+
+          const buf = new ArrayBuffer(bufSize)
           new Uint8Array(buf, CHUNK_HEADER_LENGTH_BYTES).set(
             new Uint8Array(dataArrBuffer, offset, chunkSize)
           )
@@ -1019,13 +872,10 @@ class P2PCF extends EventEmitter {
   broadcast (msg) {
     const ps = []
 
-    for (const channels of this.peers.values()) {
-      for (const peer of channels.values()) {
-        if (!peer.connected) continue
+    for (const peer of this.peers.values()) {
+      if (!peer.connected) continue
 
-        ps.push(this.send(peer, msg))
-        break
-      }
+      ps.push(this.send(peer, msg))
     }
 
     return Promise.all(ps)
@@ -1079,26 +929,28 @@ class P2PCF extends EventEmitter {
       target = this.msgChunks.get(messageId)
     }
 
+    const offsetToSet = chunkId * CHUNK_MAX_LENGTH_BYTES
+
+    const numBytesToSet = Math.min(
+      target.byteLength - offsetToSet,
+      CHUNK_MAX_LENGTH_BYTES
+    )
+
     target.set(
-      new Uint8Array(data.buffer, data.byteOffset + CHUNK_HEADER_LENGTH_BYTES),
+      new Uint8Array(
+        data.buffer,
+        data.byteOffset + CHUNK_HEADER_LENGTH_BYTES,
+        numBytesToSet
+      ),
       chunkId * CHUNK_MAX_LENGTH_BYTES
     )
 
     return target
   }
 
-  /**
-   * Remove all stored chunks of a particular message
-   * @param integer msgID Message ID
-   */
   _destroyChunks (msgID) {
     this.msgChunks.delete(msgID)
   }
-
-  /**
-   * Initialize trackers and fetch peers
-   */
-  _fetchPeers () {}
 
   _updateConnectedSessions () {
     this.connectedSessions.length = 0
@@ -1203,7 +1055,6 @@ class P2PCF extends EventEmitter {
     })
 
     peer.on('data', data => {
-      this.emit('data', peer, data)
       let messageId = null
       let u16 = null
       if (data.length >= CHUNK_HEADER_LENGTH_BYTES) {
@@ -1222,15 +1073,7 @@ class P2PCF extends EventEmitter {
           const last = u16[3] !== 0
           const msg = this._chunkHandler(data, messageId, chunkId, last)
           if (last) {
-            /**
-             * If there's someone waiting for a response, call them
-             */
-            if (this.responseWaiting.get(peer.id).has(messageId)) {
-              this.responseWaiting.get(peer.id).get(messageId)([peer, msg])
-              this.responseWaiting.get(peer.id).delete(messageId)
-            } else {
-              this.emit('msg', peer, msg)
-            }
+            this.emit('msg', peer, msg)
             this._destroyChunks(messageId)
           }
         } catch (e) {

@@ -4,7 +4,6 @@ const arrayBufferToHex = require('array-buffer-to-hex')
 const base64ToHex = b64 => arrayBufferToHex(base64ToArrayBuffer(b64))
 
 function createSdp (isOffer, iceUFrag, icePwd, dtlsFingerprintBase64) {
-  console.log('finger', dtlsFingerprintBase64)
   const dtlsHex = base64ToHex(dtlsFingerprintBase64)
   let dtlsFingerprint = ''
 
