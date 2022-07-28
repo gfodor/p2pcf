@@ -4,6 +4,10 @@
  * Licensed under MIT
  */
 
+/*
+ * Known issues:
+ * - ice reneg fails in firefox when iphone joins first (as the initiator, peer B) on TURN when adding track
+ */
 const getBrowserRTC = require('get-browser-rtc')
 const EventEmitter = require('events')
 const Peer = require('simple-peer')
