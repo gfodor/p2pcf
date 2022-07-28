@@ -11142,10 +11142,11 @@ var require_p2pcf = __commonJS({
     var { createSdp } = require_utils();
     var randomstring = require_randomstring2();
     var hexToBase64 = (hex) => arrayBufferToBase64(hexToBytes(hex));
-    var MAX_MESSAGE_LENGTH_BYTES = 20;
+    var MAX_MESSAGE_LENGTH_BYTES = 16e3;
     var CHUNK_HEADER_LENGTH_BYTES = 12;
     var CHUNK_MAGIC_WORD = 8121;
     var CHUNK_MAX_LENGTH_BYTES = MAX_MESSAGE_LENGTH_BYTES - CHUNK_HEADER_LENGTH_BYTES;
+    var SIGNAL_MESSAGE_HEADER_WORDS = [33451, 33229, 4757, 41419];
     var CANDIDATE_TYPES = {
       host: 0,
       srflx: 1,
@@ -11620,7 +11621,6 @@ var require_p2pcf = __commonJS({
                 }
               };
               peer2.once("signal", enqueuePackageFromOffer);
-              peer2.negotiate();
             }
             if (!remotePackage)
               continue;
@@ -11905,6 +11905,27 @@ var require_p2pcf = __commonJS({
               data.byteOffset,
               CHUNK_HEADER_LENGTH_BYTES / 2
             );
+            let isSignalMessage = true;
+            for (let i = 0; i < SIGNAL_MESSAGE_HEADER_WORDS.length; i++) {
+              if (u16[i] !== SIGNAL_MESSAGE_HEADER_WORDS[i]) {
+                isSignalMessage = false;
+                break;
+              }
+            }
+            if (isSignalMessage) {
+              console.log("a", data[data.length - 1]);
+              const u8 = new Uint8Array(
+                data.buffer,
+                data.byteOffset + SIGNAL_MESSAGE_HEADER_WORDS.length * 2
+              );
+              let payload = new TextDecoder("utf-8").decode(u8);
+              if (payload.endsWith("\0")) {
+                payload = payload.substring(0, payload.length - 1);
+              }
+              console.log("signal in", payload);
+              peer.signal(payload);
+              return;
+            }
             if (u16[0] === CHUNK_MAGIC_WORD) {
               messageId = u16[1];
             }
@@ -11932,6 +11953,25 @@ var require_p2pcf = __commonJS({
         peer.on("close", () => {
           this._removePeer(peer);
           this._updateConnectedSessions();
+        });
+        peer.once("_iceComplete", () => {
+          peer.on("signal", (signalData) => {
+            const payloadBytes = new TextEncoder().encode(
+              JSON.stringify(signalData)
+            );
+            let len = payloadBytes.byteLength + SIGNAL_MESSAGE_HEADER_WORDS.length * 2;
+            if (len % 2 !== 0) {
+              len++;
+            }
+            const buf = new ArrayBuffer(len);
+            const u8 = new Uint8Array(buf);
+            const u16 = new Uint16Array(buf);
+            u8.set(payloadBytes, SIGNAL_MESSAGE_HEADER_WORDS.length * 2);
+            for (let i = 0; i < SIGNAL_MESSAGE_HEADER_WORDS.length; i++) {
+              u16[i] = SIGNAL_MESSAGE_HEADER_WORDS[i];
+            }
+            this.send(peer, buf);
+          });
         });
       }
     };

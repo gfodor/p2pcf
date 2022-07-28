@@ -24,6 +24,9 @@ const CHUNK_MAGIC_WORD = 8121
 const CHUNK_MAX_LENGTH_BYTES =
   MAX_MESSAGE_LENGTH_BYTES - CHUNK_HEADER_LENGTH_BYTES
 
+// Signalling messages have a 64-bit unique header
+const SIGNAL_MESSAGE_HEADER_WORDS = [0x82ab, 0x81cd, 0x1295, 0xa1cb]
+
 const CANDIDATE_TYPES = {
   host: 0,
   srflx: 1,
@@ -655,7 +658,6 @@ class P2PCF extends EventEmitter {
           }
 
           peer.once('signal', enqueuePackageFromOffer)
-          peer.negotiate()
         }
 
         if (!remotePackage) continue
@@ -1068,6 +1070,35 @@ class P2PCF extends EventEmitter {
           data.byteOffset,
           CHUNK_HEADER_LENGTH_BYTES / 2
         )
+
+        let isSignalMessage = true
+
+        for (let i = 0; i < SIGNAL_MESSAGE_HEADER_WORDS.length; i++) {
+          if (u16[i] !== SIGNAL_MESSAGE_HEADER_WORDS[i]) {
+            isSignalMessage = false
+            break
+          }
+        }
+
+        if (isSignalMessage) {
+          // Might have a trailing null byte
+          const u8 = new Uint8Array(
+            data.buffer,
+            data.byteOffset + SIGNAL_MESSAGE_HEADER_WORDS.length * 2
+          )
+
+          let payload = new TextDecoder('utf-8').decode(u8)
+
+          // Might have a trailing byte
+          if (payload.endsWith('\0')) {
+            payload = payload.substring(0, payload.length - 1)
+          }
+
+          peer.signal(payload)
+
+          return
+        }
+
         if (u16[0] === CHUNK_MAGIC_WORD) {
           messageId = u16[1]
         }
@@ -1097,6 +1128,35 @@ class P2PCF extends EventEmitter {
     peer.on('close', () => {
       this._removePeer(peer)
       this._updateConnectedSessions()
+    })
+
+    // Once ICE completes, perform subsequent signalling via the datachannel
+    peer.once('_iceComplete', () => {
+      peer.on('signal', signalData => {
+        const payloadBytes = new TextEncoder().encode(
+          JSON.stringify(signalData)
+        )
+
+        let len =
+          payloadBytes.byteLength + SIGNAL_MESSAGE_HEADER_WORDS.length * 2
+
+        if (len % 2 !== 0) {
+          len++
+        }
+
+        // Add signal header
+        const buf = new ArrayBuffer(len)
+        const u8 = new Uint8Array(buf)
+        const u16 = new Uint16Array(buf)
+
+        u8.set(payloadBytes, SIGNAL_MESSAGE_HEADER_WORDS.length * 2)
+
+        for (let i = 0; i < SIGNAL_MESSAGE_HEADER_WORDS.length; i++) {
+          u16[i] = SIGNAL_MESSAGE_HEADER_WORDS[i]
+        }
+
+        this.send(peer, buf)
+      })
     })
   }
 }

@@ -35,8 +35,22 @@ const addMessage = message => {
   document.getElementById('messages').appendChild(messageEl)
 }
 
+let stream
+
 p2pcf.on('peerconnect', peer => {
   console.log('Peer connect', peer.id, peer)
+  if (stream) {
+    peer.addStream(stream)
+  }
+
+  peer.on('track', (track, stream) => {
+    console.log('got track', track)
+    const video = document.createElement('video')
+    video.srcObject = stream
+    document.getElementById('videos').appendChild(video)
+    video.play()
+  })
+
   addPeerUi(peer.id)
 })
 
@@ -69,6 +83,16 @@ const go = () => {
     p2pcf.broadcast(new TextEncoder().encode(box.value))
     box.value = ''
   })
+
+  document
+    .getElementById('video-button')
+    .addEventListener('click', async () => {
+      stream = await navigator.mediaDevices.getUserMedia({ video: true })
+
+      for (const peer of p2pcf.peers.values()) {
+        peer.addStream(stream)
+      }
+    })
 }
 
 if (
