@@ -8,6 +8,8 @@ const IPV4_REGEX = /^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$/
 
 const IPV6_REGEX = /(([0-9a-fA-F]{1,4}:){7,7}[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,7}:|([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}|([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}|([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}|([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:((:[0-9a-fA-F]{1,4}){1,6})|:((:[0-9a-fA-F]{1,4}){1,7}|:)|fe80:(:[0-9a-fA-F]{0,4}){0,4}%[0-9a-zA-Z]{1,}|::(ffff(:0{1,4}){0,1}:){0,1}((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])|([0-9a-fA-F]{1,4}:){1,4}:((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9]))/
 
+const RATE_LIMITING_SAMPLING_RATE = 100.0
+
 function validatePayload (headers, payload) {
   if (
     !payload.r ||
@@ -188,7 +190,7 @@ async function handleOptions (request, env) {
 
 async function lookupEntries (roomId, store) {
   let maxIndex = -1
-  const maxIndexEntry = await store.get(`${roomId}/max_index`)
+  const maxIndexEntry = await store.get(`rooms/${roomId}/max_index`)
 
   if (maxIndexEntry) {
     maxIndex = parseInt(await maxIndexEntry.text())
@@ -200,7 +202,9 @@ async function lookupEntries (roomId, store) {
   // read a few ahead of max index just to reduce latency during small groups joining on KV
   // read entries as promises first to parallelize reads. if the entries are empty then don't do this.
   for (let i = 0; i <= maxIndex; i++) {
-    const p = store.get(`${roomId}/entries:${i}`).then(v => (v ? v.json() : v))
+    const p = store
+      .get(`rooms/${roomId}/entries:${i}`)
+      .then(v => (v ? v.json() : v))
 
     entries.push(p)
     ps.push(p)
@@ -269,13 +273,13 @@ async function handleDelete (request, env, context) {
       payload.d[0] === entrySessionId &&
       payload.dk === entryDeleteKey
     ) {
-      context.waitUntil(store.delete(`${roomId}/entries:${i}`))
+      context.waitUntil(store.delete(`rooms/${roomId}/entries:${i}`))
 
       if (maxIndex === i) {
         const now = new Date().getTime()
 
         context.waitUntil(
-          store.put(`${roomId}/max_index`, `${i - 1}`, {
+          store.put(`rooms/${roomId}/max_index`, `${i - 1}`, {
             customMetadata: { expireAt: now + 8 * 60 * 60 * 1000 }
           })
         )
@@ -325,7 +329,7 @@ async function handlePost (request, env, context) {
   const now = new Date().getTime()
 
   // R2 needs vacuum
-  const nextVacuumEntry = store.get(`${roomId}/next_vacuum`)
+  const nextVacuumEntry = store.get(`rooms/${roomId}/next_vacuum`)
 
   const [entries, maxIndex] = await lookupEntries(roomId, store)
 
@@ -396,12 +400,12 @@ async function handlePost (request, env, context) {
 
         if (saved) {
           // Duplicate, weird
-          context.waitUntil(store.delete(`${roomId}/entries:${i}`))
+          context.waitUntil(store.delete(`rooms/${roomId}/entries:${i}`))
           entries[i] = null
         } else {
           context.waitUntil(
             store.put(
-              `${roomId}/entries:${i}`,
+              `rooms/${roomId}/entries:${i}`,
               JSON.stringify(newEntry),
               putOptions
             )
@@ -418,7 +422,7 @@ async function handlePost (request, env, context) {
           if (entries[i] !== null) continue
           context.waitUntil(
             store.put(
-              `${roomId}/entries:${i}`,
+              `rooms/${roomId}/entries:${i}`,
               JSON.stringify(newEntry),
               putOptions
             )
@@ -433,7 +437,7 @@ async function handlePost (request, env, context) {
           entries.push(newEntry)
           context.waitUntil(
             store.put(
-              `${roomId}/entries:${entries.length - 1}`,
+              `rooms/${roomId}/entries:${entries.length - 1}`,
               JSON.stringify(newEntry),
               putOptions
             )
@@ -448,7 +452,7 @@ async function handlePost (request, env, context) {
       // max index always increases, rely on expiration to lower watermark
       if (maxIndex < i) {
         context.waitUntil(
-          store.put(`${roomId}/max_index`, `${i}`, {
+          store.put(`rooms/${roomId}/max_index`, `${i}`, {
             customMetadata: { expireAt: now + 8 * 60 * 60 * 1000 }
           })
         )
@@ -514,7 +518,7 @@ async function handlePost (request, env, context) {
       new Promise(res => {
         setTimeout(async () => {
           const now = new Date().getTime()
-          const nextVacuumEntry = await store.get(`${roomId}/next_vacuum`)
+          const nextVacuumEntry = await store.get(`rooms/${roomId}/next_vacuum`)
 
           if (
             !nextVacuumEntry ||
@@ -523,11 +527,11 @@ async function handlePost (request, env, context) {
             let removed = 0
 
             // Vacuum
-            await store.put(`${roomId}/next_vacuum`, `${now + 30 * 1000}`) // One mintue room vacuum interval
+            await store.put(`rooms/${roomId}/next_vacuum`, `${now + 30 * 1000}`) // One mintue room vacuum interval
 
             const list = await store.list({
               include: ['customMetadata'],
-              prefix: `${roomId}/`
+              prefix: `rooms/${roomId}/`
             })
             const removePromises = []
 
@@ -565,8 +569,64 @@ async function handlePost (request, env, context) {
   return new Response(JSON.stringify(responseData), { status: 200, headers })
 }
 
+async function getResponseIfDisallowed (request, env) {
+  // No CORS header, so can't do anything
+  const origin = request.headers.get('origin')
+  if (!origin) return null
+
+  let originQuota = env.ORIGIN_QUOTA ? parseInt(env.ORIGIN_QUOTA) : 10000
+
+  if (env.ALLOWED_ORIGINS) {
+    if (!env.ORIGIN_QUOTA) {
+      originQuota = 0
+    }
+
+    if (env.ALLOWED_ORIGINS.split(',').includes(origin)) {
+      return null
+    } else {
+      return new Response('Unauthorized', { status: 401 })
+    }
+  }
+
+  if (originQuota === 0) {
+    return new Response('Unauthorized', { status: 401 })
+  }
+
+  const store = getStore(env)
+
+  const d = new Date()
+  const currentCountKey = `join-counts/${d.getYear()}-${d.getMonth()}/${encodeURIComponent(
+    origin
+  )}`
+  const currentCountEntry = await store.get(currentCountKey)
+
+  let currentCount = 0
+
+  if (currentCountEntry) {
+    currentCount = parseInt(await currentCountEntry.text())
+  }
+
+  if (currentCount >= originQuota) {
+    return new Response('Over quota', { status: 429 })
+  }
+
+  // Do 1 out of RATE_LIMITING_SAMPLING_RATE sampling
+  if (Math.random() < 1.0 / RATE_LIMITING_SAMPLING_RATE) {
+    await store.put(
+      currentCountKey,
+      (currentCount + Math.floor(RATE_LIMITING_SAMPLING_RATE)).toString()
+    )
+  }
+}
+
 export default {
   async fetch (request, env, context) {
+    const disallowedResponse = await getResponseIfDisallowed(request, env)
+
+    if (disallowedResponse) {
+      return disallowedResponse
+    }
+
     if (request.method === 'GET') {
       return handleGet(request, env, context)
     }
