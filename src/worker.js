@@ -583,8 +583,6 @@ async function getResponseIfDisallowed (request, env) {
 
     if (env.ALLOWED_ORIGINS.split(',').includes(origin)) {
       return null
-    } else {
-      return new Response('Unauthorized', { status: 401 })
     }
   }
 
