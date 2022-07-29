@@ -13,7 +13,7 @@ P2PCF also has some additional features:
 - Minimal initial signalling (1 or 2 signalling messages) using the technique [put together](https://twitter.com/evan_brass/status/1549078627282722816) by [@evan_brass](https://twitter.com/evan_brass/status)
 - Subsequent signalling over DataChannels
 - Efficient chunking + delivery of DataChannel messages that exceed the ~16k limit
-- Peers handed back from the API are [simple-peer](https://github.com/feross/simple-peer) instances which provides a simple API for interacting with the underlying PeerConnections (adding + removing media tracks, etc)
+- Peers handed back from the API are [simple-peer](https://github.com/feross/simple-peer) instances which provides a simple API for interacting with the underlying PeerConnections (adding + removing media tracks, etc.)
 
 # Example + Usage
 
