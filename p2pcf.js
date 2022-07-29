@@ -150,7 +150,7 @@ class P2PCF extends EventEmitter {
     this.packages = []
     this.dataTimestamp = null
     this.lastPackages = null
-    this.lastReceivedDataTimestamps = new Map()
+    this.lastProcessedReceivedDataTimestamps = new Map()
     this.packageReceivedFromPeers = new Set()
     this.startedAtTimestamp = null
 
@@ -410,7 +410,7 @@ class P2PCF extends EventEmitter {
     const {
       dtlsCert: localDtlsCert,
       peers,
-      lastReceivedDataTimestamps,
+      lastProcessedReceivedDataTimestamps,
       packageReceivedFromPeers,
       stunIceServers,
       turnIceServers
@@ -432,12 +432,11 @@ class P2PCF extends EventEmitter {
 
       // Don't process the same messages twice. This covers disconnect cases where stale data re-creates a peer too early.
       if (
-        lastReceivedDataTimestamps.get(remoteSessionId) === remoteDataTimestamp
+        lastProcessedReceivedDataTimestamps.get(remoteSessionId) ===
+        remoteDataTimestamp
       ) {
         continue
       }
-
-      lastReceivedDataTimestamps.set(remoteSessionId, remoteDataTimestamp)
 
       // Peer A is:
       //   - if both not symmetric or both symmetric, whoever has the most recent data is peer A, since we want Peer B created faster,
@@ -468,6 +467,11 @@ class P2PCF extends EventEmitter {
       if (isPeerA) {
         if (peers.has(remoteSessionId)) continue
         if (!remotePackage) continue
+
+        lastProcessedReceivedDataTimestamps.set(
+          remoteSessionId,
+          remoteDataTimestamp
+        )
 
         // If we already added the candidates from B, skip. This check is not strictly necessary given the peer will exist.
         if (packageReceivedFromPeers.has(remoteSessionId)) continue
@@ -576,6 +580,11 @@ class P2PCF extends EventEmitter {
         //   - Let trickle run, then once trickle finishes send a package for A to pick up = [my session id, my offer sdp, generated ufrag/pwd, dtls fingerprint, ice candidates]
         //   - keep the icecandidate listener active, and add the pfrlx candidates when they arrive (but don't send another package)
         if (!peers.has(remoteSessionId)) {
+          lastProcessedReceivedDataTimestamps.set(
+            remoteSessionId,
+            remoteDataTimestamp
+          )
+
           const remoteUfrag = randomstring.generate({ length: 12 })
           const remotePwd = randomstring.generate({ length: 32 })
           const peer = new Peer({
@@ -746,11 +755,19 @@ class P2PCF extends EventEmitter {
         newDtlsFingerprint
       ] = await this._getNetworkSettings(this.dtlsCert)
 
+      let retainedAnyReflexiveIps = false
+
+      for (const oldIp of this.reflexiveIps) {
+        for (const newIp of newReflexiveIps) {
+          if (oldIp === newIp) retainedAnyReflexiveIps = true
+        }
+      }
+
       if (
         newUdpEnabled !== this.udpEnabled ||
         newIsSymmetric !== this.isSymmetric ||
         newDtlsFingerprint !== this.dtlsFingerprint ||
-        [...this.reflexiveIps].join(' ') !== [...newReflexiveIps].join(' ')
+        !retainedAnyReflexiveIps
       ) {
         // Network reset, clear all peers
         this.packages.length = 0
@@ -759,7 +776,7 @@ class P2PCF extends EventEmitter {
           this._removePeer(peer, true)
 
           // Re-process the last incoming messages from all peers too right away
-          this.lastReceivedDataTimestamps.delete(peer.id)
+          this.lastProcessedReceivedDataTimestamps.delete(peer.id)
         }
 
         this.dataTimestamp = null
@@ -1056,6 +1073,35 @@ class P2PCF extends EventEmitter {
     console.error(err)
   }
 
+  _checkForSignalOrEmitMessage (peer, msg) {
+    const u16 = new Uint16Array(
+      msg.buffer,
+      msg.byteOffset,
+      CHUNK_HEADER_LENGTH_BYTES / 2
+    )
+
+    for (let i = 0; i < SIGNAL_MESSAGE_HEADER_WORDS.length; i++) {
+      if (u16[i] !== SIGNAL_MESSAGE_HEADER_WORDS[i]) {
+        this.emit('msg', peer, msg)
+        return
+      }
+    }
+
+    const u8 = new Uint8Array(
+      msg.buffer,
+      msg.byteOffset + SIGNAL_MESSAGE_HEADER_WORDS.length * 2
+    )
+
+    let payload = new TextDecoder('utf-8').decode(u8)
+
+    // Might have a trailing byte
+    if (payload.endsWith('\0')) {
+      payload = payload.substring(0, payload.length - 1)
+    }
+
+    peer.signal(payload)
+  }
+
   _wireUpCommonPeerEvents (peer) {
     peer.on('connect', () => {
       this.emit('peerconnect', peer)
@@ -1072,34 +1118,6 @@ class P2PCF extends EventEmitter {
           CHUNK_HEADER_LENGTH_BYTES / 2
         )
 
-        let isSignalMessage = true
-
-        for (let i = 0; i < SIGNAL_MESSAGE_HEADER_WORDS.length; i++) {
-          if (u16[i] !== SIGNAL_MESSAGE_HEADER_WORDS[i]) {
-            isSignalMessage = false
-            break
-          }
-        }
-
-        if (isSignalMessage) {
-          // Might have a trailing null byte
-          const u8 = new Uint8Array(
-            data.buffer,
-            data.byteOffset + SIGNAL_MESSAGE_HEADER_WORDS.length * 2
-          )
-
-          let payload = new TextDecoder('utf-8').decode(u8)
-
-          // Might have a trailing byte
-          if (payload.endsWith('\0')) {
-            payload = payload.substring(0, payload.length - 1)
-          }
-
-          peer.signal(payload)
-
-          return
-        }
-
         if (u16[0] === CHUNK_MAGIC_WORD) {
           messageId = u16[1]
         }
@@ -1110,14 +1128,14 @@ class P2PCF extends EventEmitter {
           const last = u16[3] !== 0
           const msg = this._chunkHandler(data, messageId, chunkId, last)
           if (last) {
-            this.emit('msg', peer, msg)
+            this._checkForSignalOrEmitMessage(peer, msg)
             this.msgChunks.delete(messageId)
           }
         } catch (e) {
           console.error(e)
         }
       } else {
-        this.emit('msg', peer, data)
+        this._checkForSignalOrEmitMessage(peer, data)
       }
     })
 
