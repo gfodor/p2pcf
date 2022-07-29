@@ -116,8 +116,6 @@ function createSdp (isOffer, iceUFrag, icePwd, dtlsFingerprintBase64) {
   return sdp.join('\r\n') + '\r\n'
 }
 
-module.exports = { createSdp }
-
 // parseCandidate from https://github.com/fippo/sdp
 const parseCandidate = line => {
   let parts
