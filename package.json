@@ -29,6 +29,7 @@
   "devDependencies": {
     "airtap": "^4.0.4",
     "browserify": "^17.0.0",
+    "esbuild": "^0.14.51",
     "lint-staged": "^12.3.7",
     "prettier": "^2.7.1",
     "prettier-standard": "^15.0.1",
