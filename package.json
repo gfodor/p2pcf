@@ -6,10 +6,11 @@
     "crypto": "crypto-browserify",
     "stream": "stream-browserify"
   },
-  "types": "p2pcf.d.ts",
+  "main": "src/p2pcf.js",
   "scripts": {
-    "build": "esbuild ./p2pcf.js --inject:esbuild.inject.js --define:global=window --format=esm --bundle --outfile=dist/p2pcf.js",
-    "build:min": "esbuild ./p2pcf.js --minify --inject:esbuild.inject.js --define:global=window --format=esm --bundle --outfile=dist/p2pcf.min.js"
+    "build": "esbuild src/p2pcf.js --inject:esbuild.inject.js --define:global=window --format=esm --bundle --outfile=dist/p2pcf.js",
+    "build:min": "esbuild src/p2pcf.js --minify --inject:esbuild.inject.js --define:global=window --format=esm --bundle --outfile=dist/p2pcf.min.js",
+    "start:worker": "wrangler dev"
   },
   "dependencies": {
     "array-buffer-to-hex": "^1.0.0",
@@ -35,7 +36,8 @@
     "standard": "^17.0.0",
     "start-server-and-test": "^1.14.0",
     "tape": "^5.5.3",
-    "tinyify": "^3.1.0"
+    "tinyify": "^3.1.0",
+    "wrangler": "2.0.22"
   },
   "repository": {
     "type": "git",

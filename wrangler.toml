@@ -1,0 +1,7 @@
+name = "p2pcf"
+main = "src/worker.js"
+compatibility_date = "2022-07-19"
+
+r2_buckets  = [
+  { binding = "BUCKET", bucket_name = "p2pcf", preview_bucket_name =  "p2pcf-dev" }
+]
