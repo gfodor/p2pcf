@@ -17,6 +17,8 @@ P2PCF also has some additional features:
 
 # Example + Usage
 
+P2PCF will use a free public worker to get you started but you should [set up your own worker on Cloudflare](https://github.com/gfodor/p2pcf/blob/master/INSTALL.md).
+
 A basic chat + video sharing example demonstrates the library at https://gfodor.github.io/p2pcf-demo ([source](https://github.com/gfodor/p2pcf/blob/master/examples/basic-video-chat/index.js))
 
 Basic usage:
