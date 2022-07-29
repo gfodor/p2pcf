@@ -3,6 +3,5 @@
 esbuild.inject.js
 examples
 *.md
-src
 wrangler.toml
 dist/p2pcf.js
