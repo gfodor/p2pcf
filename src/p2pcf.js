@@ -11,10 +11,7 @@ const debug = require('debug')('p2pcf')
 const pako = require('pako')
 const { encode: arrayBufferToBase64 } = require('base64-arraybuffer')
 const { hexToBytes } = require('convert-hex')
-const { createSdp } = require('./utils')
 const randomstring = require('randomstring')
-
-const hexToBase64 = hex => arrayBufferToBase64(hexToBytes(hex))
 
 // Based on Chrome
 const MAX_MESSAGE_LENGTH_BYTES = 16000
@@ -77,6 +74,49 @@ const iOS = !!ua.match(/iPad/i) || !!ua.match(/iPhone/i)
 const webkit = !!ua.match(/WebKit/i)
 const iOSSafari = !!(iOS && webkit && !ua.match(/CriOS/i))
 const isFirefox = !!(navigator?.userAgent.toLowerCase().indexOf('firefox') > -1)
+
+const { decode: base64ToArrayBuffer } = require('base64-arraybuffer')
+const arrayBufferToHex = require('array-buffer-to-hex')
+
+const hexToBase64 = hex => arrayBufferToBase64(hexToBytes(hex))
+const base64ToHex = b64 => arrayBufferToHex(base64ToArrayBuffer(b64))
+
+function createSdp (isOffer, iceUFrag, icePwd, dtlsFingerprintBase64) {
+  const dtlsHex = base64ToHex(dtlsFingerprintBase64)
+  let dtlsFingerprint = ''
+
+  for (let i = 0; i < dtlsHex.length; i += 2) {
+    dtlsFingerprint += `${dtlsHex[i]}${dtlsHex[i + 1]}${
+      i === dtlsHex.length - 2 ? '' : ':'
+    }`.toUpperCase()
+  }
+
+  const sdp = [
+    'v=0',
+    'o=- 5498186869896684180 2 IN IP4 127.0.0.1',
+    's=-',
+    't=0 0',
+    'a=msid-semantic: WMS',
+    'm=application 9 UDP/DTLS/SCTP webrtc-datachannel',
+    'c=IN IP4 0.0.0.0',
+    'a=mid:0',
+    'a=sctp-port:5000'
+  ]
+
+  if (isOffer) {
+    sdp.push('a=setup:actpass')
+  } else {
+    sdp.push('a=setup:active')
+  }
+
+  sdp.push(`a=ice-ufrag:${iceUFrag}`)
+  sdp.push(`a=ice-pwd:${icePwd}`)
+  sdp.push(`a=fingerprint:sha-256 ${dtlsFingerprint}`)
+
+  return sdp.join('\r\n') + '\r\n'
+}
+
+module.exports = { createSdp }
 
 // parseCandidate from https://github.com/fippo/sdp
 const parseCandidate = line => {
