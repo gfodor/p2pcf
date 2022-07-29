@@ -76,7 +76,7 @@ Go to https://www.cloudflare.com/ and create an account.
 
 ![image](https://user-images.githubusercontent.com/220020/181831397-54f780ca-9ac5-4265-8254-d606c1178760.png)
 
-6. Your worker is now deployed and ready to be used. Hit the URL to your worker to make sure it's working:
+6. Your worker is now deployed and ready to be used. Hit the URL to your worker (under `Routes`) to make sure it's working:
 
 ![image](https://user-images.githubusercontent.com/220020/181832545-e5306fa4-b408-41e0-be07-027dc4eeab41.png)
 
