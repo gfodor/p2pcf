@@ -186,8 +186,7 @@ class P2PCF extends EventEmitter {
     this.packageReceivedFromPeers = new Set()
     this.startedAtTimestamp = null
 
-    this.workerUrl =
-      options.workerUrl || 'https://signalling.minddrop.workers.dev'
+    this.workerUrl = options.workerUrl || 'https://p2pcf.minddrop.workers.dev'
 
     if (this.workerUrl.endsWith('/')) {
       this.workerUrl = this.workerUrl.substring(0, this.workerUrl.length - 1)
