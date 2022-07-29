@@ -7,7 +7,6 @@
 const getBrowserRTC = require('get-browser-rtc')
 const EventEmitter = require('events')
 const Peer = require('simple-peer')
-const debug = require('debug')('p2pcf')
 const pako = require('pako')
 const { encode: arrayBufferToBase64 } = require('base64-arraybuffer')
 const { hexToBytes } = require('convert-hex')
@@ -928,8 +927,6 @@ class P2PCF extends EventEmitter {
       } else {
         peer.send(dataArrBuffer)
       }
-
-      debug('sent a message to ' + peer.id)
     })
   }
 
