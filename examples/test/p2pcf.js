@@ -11906,10 +11906,14 @@ var require_p2pcf = __commonJS({
         console.error(err);
       }
       _checkForSignalOrEmitMessage(peer, msg) {
+        if (msg.buffer.byteLength < SIGNAL_MESSAGE_HEADER_WORDS.length * 2) {
+          this.emit("msg", peer, msg);
+          return;
+        }
         const u16 = new Uint16Array(
           msg.buffer,
           msg.byteOffset,
-          CHUNK_HEADER_LENGTH_BYTES / 2
+          SIGNAL_MESSAGE_HEADER_WORDS.length
         );
         for (let i = 0; i < SIGNAL_MESSAGE_HEADER_WORDS.length; i++) {
           if (u16[i] !== SIGNAL_MESSAGE_HEADER_WORDS[i]) {
