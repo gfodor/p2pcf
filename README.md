@@ -15,7 +15,35 @@ P2PCF also has some additional features:
 - Efficient chunking + delivery of DataChannel messages that exceed the ~16k limit
 - Peers handed back from the API are [simple-peer](https://github.com/feross/simple-peer) instances which provides a nice API to managing the underlying PeerConnections
 
-# Cloudflare Usage
+# Example + Usage
+
+A basic chat + video sharing example demonstrates the library at https://gfodor.github.io/p2pcf-demo ([source](https://github.com/gfodor/p2pcf/tree/master/examples/basic-video-chat))
+
+Basic usage:
+
+```
+import P2PCF from 'p2pcf'
+
+const username = 'MyUsername'
+const room = 'MyRoom'
+
+const p2pcf = new P2PCF(username, room, {
+  workerUrl: '<your worker url>' // Optional - if left out, will use a public worker
+  stunIceServers: <your STUN servers> // Optional - if left out, will use public STUN from Google + Twilio
+  turnIceServers: <your TURN servers> // Optional - if left out, will use openrelay public TURN from metered.ca
+  networkChangePollIntervalMs: ... // Optional - time in milliseconds to poll STUN for IP address changes (default: 15000)
+  stateExpirationIntervalMs: ... // Optional - time in milliseconds that peers will timeout during polling (default: 120000, 2 minutes)
+  stateHeartbeatWindowMs: ... // Optional - time in milliseconds before expiration to send heartbeat (default: 30000, 30 seconds)
+  
+});
+
+```
+
+`stunIceServers` and `turnIceServers` are optional, but if provided, should be in the format of the [`iceServers` option](https://developer.mozilla.org/en-US/docs/Web/API/RTCPeerConnection/RTCPeerConnection#parameters) passed to `RTCPeerConnection`.
+
+Note that peers who are both on symmetric NATs (or one symmetric NAT + one port restricted NAT) will use TURN. If you do not specify a TURN server then the TURN server provided by [Open Relay](https://www.metered.ca/tools/openrelay/) will be used. It's estimated 8% of visitors require TURN.
+
+# Estimated Cloudflare Usage
 
 The worker provides signalling via HTTP polling (with backoff when the room is idle), and each request to the server performs a small number of reads from R2. Each join will do at least 1 writes to R2 and up to N + 1 writes (one for each peer, and a metadata update) in the worst-case where all peers are behind symmetric NATs and need to perform bi-directional hole punching to establish their initial DataChannel. Subsequent renegoations are performed over the DataChannel and so do not incur any R2 writes. Clients also heartbeat to maintain livliness every 90 seconds, which incurs an additional write each time.
 
