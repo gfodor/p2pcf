@@ -31,7 +31,7 @@ const room = 'MyRoom'
 
 const p2pcf = new P2PCF(username, room, {
   // Worker URL (optional) - if left out, will use a public worker
-  workerUrl: '<your worker url>'
+  workerUrl: '<your worker url>',
   
   // STUN ICE servers (optional)
   // If left out, will use public STUN from Google + Twilio
