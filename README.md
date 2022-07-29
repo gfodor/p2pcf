@@ -26,10 +26,10 @@ Basic usage:
 ```
 import P2PCF from 'p2pcf'
 
-const username = 'MyUsername'
-const room = 'MyRoom'
+const client_id = 'MyUsername'
+const room_id = 'MyRoom'
 
-const p2pcf = new P2PCF(username, room, {
+const p2pcf = new P2PCF(client_id, room_id, {
   // Worker URL (optional) - if left out, will use a public worker
   workerUrl: '<your worker url>',
   
@@ -67,7 +67,21 @@ p2pcf.start()
 
 p2pcf.on('peerconnect', peer => {
   // New peer connected
+  
   // Peer is an instance of simple-peer (https://github.com/feross/simple-peer)
+  //
+  // The peer has two custom fields:
+  // - id (a per session unique id)
+  // - client_id (which was passed to their P2PCF constructor)
+  
+  console.log("New peer:", peer.id, peer.client_id)
+  
+  peer.on('track', (track, stream) => {
+    // New media track + stream from peer
+  })
+  
+  // Add a media stream to the peer to start sending it
+  peer.addStream(new MediaStream(...))
 })
 
 p2pcf.on('peerclose', peer => {
