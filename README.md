@@ -3,9 +3,9 @@
 
 # P2PCF
 
-P2PCF enables free (or cheap) serverless WebRTC signalling using a [Cloudflare worker](https://workers.cloudflare.com/) and a [Cloudflare R2](https://www.cloudflare.com/products/r2/) bucket. The API is inspired by [P2PT](https://github.com/subins2000/p2pt), but instead of using WebTorrent trackers, which may go down, a custom Cloudflare worker is provided whose I/O is designed to be free for most use-cases, and otherwise very cheap.
+P2PCF enables free (or cheap) serverless WebRTC signalling using a [Cloudflare worker](https://workers.cloudflare.com/) and a [Cloudflare R2](https://www.cloudflare.com/products/r2/) bucket. The API is inspired by [P2PT](https://github.com/subins2000/p2pt), but instead of using WebTorrent trackers, which may go down, a custom Cloudflare worker is provided whose level of I/O aims to be free for most use-cases, and otherwise very cheap.
 
-The point of this is so people can deploy WebRTC-enabled applications without having to think (much) about managing a signaling server. Out of the box the library will "just work" using a public worker that is subject to quota. [Setting up your own worker](https://github.com/gfodor/p2pcf/blob/master/INSTALL.md) is easy and just requires a few minutes using Cloudflare.
+The point is to allow people to deploy WebRTC-enabled applications without having to manage or worry (much) about a signaling server. Out of the box the library will "just work" using a free public worker (run by the author) that is subject to quota. However, [setting up your own worker](https://github.com/gfodor/p2pcf/blob/master/INSTALL.md) is easy and takes just a few minutes. Once it is deployed, the worker will "just work" without any further maintenance.
 
 P2PCF also has some additional features:
 
@@ -13,11 +13,13 @@ P2PCF also has some additional features:
 - Minimal initial signalling (1 or 2 signalling messages) using the technique [put together](https://twitter.com/evan_brass/status/1549078627282722816) by [@evan_brass](https://twitter.com/evan_brass/status)
 - Subsequent signalling over DataChannels
 - Efficient chunking + delivery of DataChannel messages that exceed the ~16k limit
-- Peers handed back from the API are [simple-peer](https://github.com/feross/simple-peer) instances which provides a simple API for interacting with the underlying PeerConnections (adding + removing media tracks, etc)
+- Peers handed back from the API are [simple-peer](https://github.com/feross/simple-peer) instances which provides a simple API for interacting with the underlying PeerConnections (adding + removing media tracks, etc.)
 
 # Example + Usage
 
-P2PCF will use a free public worker to get you started but you should [set up your own worker on Cloudflare](https://github.com/gfodor/p2pcf/blob/master/INSTALL.md).
+Out of the box, P2PCF will use a free public worker.
+
+Once you're ready, you should [set up your own worker on Cloudflare](https://github.com/gfodor/p2pcf/blob/master/INSTALL.md): https://github.com/gfodor/p2pcf/blob/master/INSTALL.md
 
 A basic chat + video sharing example demonstrates the library at https://gfodor.github.io/p2pcf-demo ([source](https://github.com/gfodor/p2pcf/blob/master/examples/basic-video-chat/index.js))
 
