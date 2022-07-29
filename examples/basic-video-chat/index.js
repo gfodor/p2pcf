@@ -104,5 +104,5 @@ if (
 ) {
   go()
 } else {
-  window.addEventListener('DOMCOntentLoaded', go, { once: true })
+  window.addEventListener('DOMContentLoaded', go, { once: true })
 }
