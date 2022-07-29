@@ -56,12 +56,6 @@ Go to https://www.cloudflare.com/ and create an account.
 
 ![image](https://user-images.githubusercontent.com/220020/181830368-fc79fc27-521a-4fbd-acd4-ae5c88d99d4e.png)
 
-5. (Optional) You can add two other optional variables in the `Environment Variables` in `Settings` to increase the security of your worker.
- - `ALLOWED_ORIGINS`: A comma-separated list of origins that will be allowed to access the worker. If you're not offering a public worker, this is recommended.
-   - Example: `https://mysite.com,https://app.mysite.com` would limit use of the worker to secured sites running on `mysite.com` or `app.mysite.com`.
- - `ORIGIN_QUOTA`: Number of joins per month to allow for any origin not specified in `ALLOWED_ORIGINS`. If you're offering a public worker, this is recommended to rate limit public usage. The default is 1000.
-   - Example: `100` would limit use of the worker to 100 joins per month from any origin.
-
 #### Deploy the worker code
 
 1. Go back to your worker's settings. Click `Workers` in the main navigation:
@@ -84,7 +78,24 @@ Go to https://www.cloudflare.com/ and create an account.
 
 6. Your worker is now deployed.
 
-7.
-8. 
-## 
-https://github.com/gfodor/p2pcf/blob/master/src/worker.js
+7. (Optional) You can add two other optional variables in the `Environment Variables` in `Settings` to increase the security of your worker.
+ - `ALLOWED_ORIGINS`: A comma-separated list of origins that will be allowed to access the worker. If you're not offering a public worker, this is recommended.
+   - Example: `https://mysite.com,https://app.mysite.com` would limit use of the worker to secured sites running on `mysite.com` or `app.mysite.com`.
+ - `ORIGIN_QUOTA`: Number of joins per month to allow for any origin not specified in `ALLOWED_ORIGINS`. If you're offering a public worker, this is recommended to rate limit public usage. The default is 1000.
+   - Example: `100` would limit use of the worker to 100 joins per month from any origin.
+
+#### Use your worker in your code
+
+The URL to your worker can be found at the top of the console view of your worker:
+
+![image](https://user-images.githubusercontent.com/220020/181832545-e5306fa4-b408-41e0-be07-027dc4eeab41.png)
+
+To use your worker in your client code, specify it as the `workerUrl` in the options passed to the `P2PCF` constructor:
+
+```
+import P2PCF from 'p2pcf'
+
+const p2pcf = new P2PCF('MyUsername', 'MyRoom', { workerUrl: "https://p2pcf.myworker.workers.dev/" })
+```
+
+That's it! You now have a free (or cheap) WebRTC signalling server that will stay up as long as Cloudflare is working.
