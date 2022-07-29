@@ -59,7 +59,7 @@ const p2pcf = new P2PCF(client_id, room_id, {
   // Polling rate during state transitions
   fastPollingRateMs: ...,
   
-  // Slow polling rate (milliseconds, optional, default: 5000, 5 seconds)
+  // Slow polling rate (milliseconds, optional, default: 1500, 1.5 seconds)
   // Polling rate when state is idle
   slowPollingRateMs: ...,
 });

@@ -203,7 +203,7 @@ class P2PCF extends EventEmitter {
 
     this.fastPollingDurationMs = options.fastPollingDurationMs || 10000
     this.fastPollingRateMs = options.fastPollingRateMs || 750
-    this.slowPollingRateMs = options.slowPollingRateMs || 5000
+    this.slowPollingRateMs = options.slowPollingRateMs || 1500
 
     this.wrtc = getBrowserRTC()
     this.dtlsCert = null
