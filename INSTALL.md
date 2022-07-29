@@ -76,7 +76,9 @@ Go to https://www.cloudflare.com/ and create an account.
 
 ![image](https://user-images.githubusercontent.com/220020/181831397-54f780ca-9ac5-4265-8254-d606c1178760.png)
 
-6. Your worker is now deployed and ready to be used.
+6. Your worker is now deployed and ready to be used. Hit the URL to your worker to make sure it's working:
+
+![image](https://user-images.githubusercontent.com/220020/181832545-e5306fa4-b408-41e0-be07-027dc4eeab41.png)
 
 7. (Optional) You can add two other optional variables in the `Environment Variables` in `Settings` to increase the security of your worker.
  - `ALLOWED_ORIGINS`: A comma-separated list of origins that will be allowed to access the worker. If you're not offering a public worker, this is recommended.
