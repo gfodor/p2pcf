@@ -5,7 +5,7 @@
 
 P2PCF enables free (or cheap) serverless WebRTC signalling using a [Cloudflare worker](https://workers.cloudflare.com/) and a [Cloudflare R2](https://www.cloudflare.com/products/r2/) bucket. The API is inspired by [P2PT](https://github.com/subins2000/p2pt), but instead of using WebTorrent trackers, which may go down, a custom Cloudflare worker is provided whose level of I/O aims to be free for most use-cases, and otherwise very cheap.
 
-The point of this is so people can deploy WebRTC-enabled applications without having to think (much) about managing a signaling server. Out of the box the library will "just work" using a public worker that is subject to quota. [Setting up your own worker](https://github.com/gfodor/p2pcf/blob/master/INSTALL.md) is easy and just requires a few minutes using Cloudflare.
+The point is to allow people to deploy WebRTC-enabled applications without having to think (much) about managing a signaling server. Out of the box the library will "just work" using a free public worker (run by the author) that is subject to quota. However, [setting up your own worker](https://github.com/gfodor/p2pcf/blob/master/INSTALL.md) is easy and just requires a few minutes using Cloudflare. Once it is set up, it will "just work" without any maintenance.
 
 P2PCF also has some additional features:
 
