@@ -22,8 +22,6 @@ Go to https://www.cloudflare.com/ and create an account.
 
 4. Click `Create Bucket`
 
-![image](https://user-images.githubusercontent.com/220020/181828972-ddc40644-3e38-417c-b221-9eaf2f005123.png)
-
 ### Create the Cloudflare Worker
 
 1. In the Cloudflare console, go to `Workers` in the main navigation:
@@ -32,9 +30,7 @@ Go to https://www.cloudflare.com/ and create an account.
 
 2. Then, `Create a Service`
 
-![image](https://user-images.githubusercontent.com/220020/181829338-cc3c0dd0-e26d-47e5-9c9f-48fb10a2d180.png)
-
-4. Enter any service name you want (we use `p2pcf`). Leave the starter type as `HTTP Handler`. Press `Create service`.
+3. Enter any service name you want (we use `p2pcf`). Leave the starter type as `HTTP Handler`. Press `Create service`.
 
 ![image](https://user-images.githubusercontent.com/220020/181829602-fa8c0b40-7e1f-445b-bfe0-434be2081ebd.png)
 
@@ -58,7 +54,7 @@ Go to https://www.cloudflare.com/ and create an account.
 
 #### Deploy the worker code
 
-1. Go back to your worker's settings. Click `Workers` in the main navigation:
+1. Go back to your worker's dashboard. To get there `Workers` in the main navigation:
 
 ![image](https://user-images.githubusercontent.com/220020/181829226-a3ee9598-b6cc-47b6-95c0-a3a38789c9b2.png)
 
