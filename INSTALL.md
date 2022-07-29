@@ -20,7 +20,9 @@ Go to https://www.cloudflare.com/ and create an account.
 
 ![image](https://user-images.githubusercontent.com/220020/181829058-89634166-158c-4e18-a30f-e75d78fa1a58.png)
 
-4. Hit "Create Bucket"
+4. Click `Create Bucket`
+
+![image](https://user-images.githubusercontent.com/220020/181828972-ddc40644-3e38-417c-b221-9eaf2f005123.png)
 
 ### Create the Cloudflare Worker
 
@@ -40,11 +42,11 @@ Go to https://www.cloudflare.com/ and create an account.
 
 1. In your Worker's view, click the `Settings` tab:
 
-![image](https://user-images.githubusercontent.com/220020/181829834-c19e78f2-9b13-4e59-811c-aaddf7eaf148.png)
+![image](https://user-images.githubusercontent.com/220020/181831046-55f4e631-a895-4607-86b9-ee12c7fdd76a.png)
 
 2. Click `Variables` on the left:
 
-![image](https://user-images.githubusercontent.com/220020/181830031-767df019-70bc-44a8-bb98-79179cb07abb.png)
+![image](https://user-images.githubusercontent.com/220020/181831117-2c33e8b6-95e4-4919-9bb1-0e3ecc3f39b8.png)
 
 3. Scroll down to `R2 Bucket Bindings` and click `Add Binding`:
 
@@ -54,7 +56,11 @@ Go to https://www.cloudflare.com/ and create an account.
 
 ![image](https://user-images.githubusercontent.com/220020/181830368-fc79fc27-521a-4fbd-acd4-ae5c88d99d4e.png)
 
-7. Now, copy the [worker source](https://github.com/gfodor/p2pcf/blob/master/src/worker.js) from https://github.com/gfodor/p2pcf/blob/master/src/worker.js (Click Raw to more easily copy it)
+5. (Optional) You can add two other optional variables in the `Environment Variables` in `Settings` to increase the security of your worker.
+ - `ALLOWED_ORIGINS`: A comma-separated list of origins that will be allowed to access the worker. If you're not offering a public worker, this is recommended.
+   - Example: `https://mysite.com,https://app.mysite.com` would limit use of the worker to sites running on `mysite.com` or `app.mysite.com`.
+ - `ORIGIN_QUOTA`: Number of joins per month to allow for any origin not specified in `ALLOWED_ORIGINS`. If you're offering a public worker, this is recommended to rate limit public usage. The default is 1000.
+   - Example: `100` would limit use of the worker to 100 joins per month from any origin.
 
 #### Deploy the worker code
 
@@ -66,11 +72,19 @@ Go to https://www.cloudflare.com/ and create an account.
 
 ![image](https://user-images.githubusercontent.com/220020/181830606-20322fe4-fdc8-409d-b5eb-a002b6cb22e5.png)
 
-3. Click on `Quick Edit`
+3. Click on `Quick Edit`. This will open the code editor.
 
 ![image](https://user-images.githubusercontent.com/220020/181830731-a9e17ed9-43fe-4e1d-b5c7-6e66f7f51bdc.png)
 
-4.
-6. 
+4. Now, in a separate tab, open the [worker source](https://github.com/gfodor/p2pcf/blob/master/src/worker.js) from https://github.com/gfodor/p2pcf/blob/master/src/worker.js and copy it. (Click `Raw` to get the raw text.)
+
+5. Paste it into the editor, click `Save and Deploy`, and click to confirm the deployment.
+
+![image](https://user-images.githubusercontent.com/220020/181831397-54f780ca-9ac5-4265-8254-d606c1178760.png)
+
+6. Your worker is now deployed.
+
+7.
+8. 
 ## 
 https://github.com/gfodor/p2pcf/blob/master/src/worker.js
