@@ -1,4 +1,4 @@
-# Installing Cloudflare Worker
+# Installing the P2PCF Cloudflare Worker
 
 Setting up the worker is a few simple steps.
 
