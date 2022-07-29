@@ -17,7 +17,7 @@ P2PCF also has some additional features:
 
 # Example + Usage
 
-A basic chat + video sharing example demonstrates the library at https://gfodor.github.io/p2pcf-demo ([source](https://github.com/gfodor/p2pcf/tree/master/examples/basic-video-chat))
+A basic chat + video sharing example demonstrates the library at https://gfodor.github.io/p2pcf-demo ([source](https://github.com/gfodor/p2pcf/blob/master/examples/basic-video-chat/index.js))
 
 Basic usage:
 
