@@ -106,6 +106,8 @@ p2pcf.destroy()
 
 `stunIceServers` and `turnIceServers` are optional, but if provided, should be in the format of the [`iceServers` option](https://developer.mozilla.org/en-US/docs/Web/API/RTCPeerConnection/RTCPeerConnection#parameters) passed to `RTCPeerConnection`.
 
+When a new peer joins, it can take up to `slowPollingRateMs` before negotiation will begin. If you want peers to connect more quickly, you can adjust `slowPollingRateMs` but it will result in increased worker requests and R2 reads.
+
 Note that peers who are both on symmetric NATs (or one symmetric NAT + one port restricted NAT) will use TURN. If you do not specify a TURN server then the TURN server provided by [Open Relay](https://www.metered.ca/tools/openrelay/) will be used. It's estimated 8% of visitors require TURN.
 
 # Estimated Cloudflare Usage
