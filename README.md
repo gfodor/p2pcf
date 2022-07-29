@@ -28,15 +28,62 @@ const username = 'MyUsername'
 const room = 'MyRoom'
 
 const p2pcf = new P2PCF(username, room, {
-  workerUrl: '<your worker url>' // Optional - if left out, will use a public worker
-  stunIceServers: <your STUN servers> // Optional - if left out, will use public STUN from Google + Twilio
-  turnIceServers: <your TURN servers> // Optional - if left out, will use openrelay public TURN from metered.ca
-  networkChangePollIntervalMs: ... // Optional - time in milliseconds to poll STUN for IP address changes (default: 15000)
-  stateExpirationIntervalMs: ... // Optional - time in milliseconds that peers will timeout during polling (default: 120000, 2 minutes)
-  stateHeartbeatWindowMs: ... // Optional - time in milliseconds before expiration to send heartbeat (default: 30000, 30 seconds)
+  // Worker URL (optional) - if left out, will use a public worker
+  workerUrl: '<your worker url>'
   
+  // STUN ICE servers (optional)
+  // If left out, will use public STUN from Google + Twilio
+  stunIceServers: <your STUN servers>,
+  
+  // TURN ICE servers (optional)
+  // If left out, will use openrelay public TURN servers from metered.ca
+  turnIceServers: <your TURN servers>,
+  
+  // Network change poll interval (milliseconds, optional, default: 15000, 15 seconds)
+  // Interval to poll STUN for network changes + reconnect
+  networkChangePollIntervalMs: ...,
+  
+  // State expiration interval (milliseconds, optional, default: 120000, 2 minutes)
+  // Timeout interval for peers during polling
+  stateExpirationIntervalMs: ...,
+  
+  // State heartbeat interval (milliseconds, optional, default: 30000, 30 seconds)
+  // Time before expiration to heartbeat
+  stateHeartbeatWindowMs: ...,
+  
+  // Fast polling rate (milliseconds, optional, default: 750)
+  // Polling rate during state transitions
+  fastPollingRateMs: ...,
+  
+  // Slow polling rate (milliseconds, optional, default: 5000, 5 seconds)
+  // Polling rate when state is idle
+  slowPollingRateMs: ...,
 });
 
+// Start polling
+p2pcf.start()
+
+p2pcf.on('peerconnect', peer => {
+  // New peer connected
+  // Peer is an instance of simple-peer (https://github.com/feross/simple-peer)
+})
+
+p2pcf.on('peerclose', peer => {
+  // Peer has disconnected
+})
+
+p2pcf.on('msg', (peer, data) => {
+  // Received data from peer (data is an ArrayBuffer)
+})
+
+// Broadcast a message via data channel to all peers
+p2pcf.broadcast(new ArrayBuffer(...))
+
+// To send a message via data channel to just one peer:
+p2pcf.send(peer, new ArrayBuffer(...))
+
+// To stop polling + shut down (not necessary to call this typically, page transition suffices.)
+p2pcf.destroy()
 ```
 
 `stunIceServers` and `turnIceServers` are optional, but if provided, should be in the format of the [`iceServers` option](https://developer.mozilla.org/en-US/docs/Web/API/RTCPeerConnection/RTCPeerConnection#parameters) passed to `RTCPeerConnection`.
