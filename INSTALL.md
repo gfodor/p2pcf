@@ -80,7 +80,7 @@ Go to https://www.cloudflare.com/ and create an account.
  - `ALLOWED_ORIGINS`: A comma-separated list of origins that will be allowed to access the worker. If you're not offering a public worker, this is recommended.
    - Example: `https://mysite.com,https://app.mysite.com` would limit use of the worker to secured sites running on `mysite.com` or `app.mysite.com`.
  - `ORIGIN_QUOTA`: Number of requests per month to allow for any origin not specified in `ALLOWED_ORIGINS`. If you're offering a public worker, this is recommended to rate limit public usage. The default is 10000 if you have not restricted origins via `ALLOWED_ORIGINS` and zero if origins are restricted (so if you restrict origins, other origins will have no access by default.)
-   - Example: `100` would limit use of the worker to 100 joins per month from any origin.
+   - Example: `100` would limit use of the worker to 100 requests per month from a given origin.
 
 #### Use your worker in your code
 
