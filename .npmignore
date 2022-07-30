@@ -4,4 +4,4 @@ esbuild.inject.js
 examples
 *.md
 wrangler.toml
-dist/p2pcf.js
+dist/p2pcf.min.js
