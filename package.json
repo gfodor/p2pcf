@@ -6,7 +6,7 @@
     "crypto": "crypto-browserify",
     "stream": "stream-browserify"
   },
-  "main": "dist/p2pcf.min.js",
+  "main": "src/p2pcf.js",
   "scripts": {
     "build": "esbuild src/p2pcf.js --inject:esbuild.inject.js --define:global=window --format=esm --bundle --outfile=dist/p2pcf.js",
     "build:min": "esbuild src/p2pcf.js --minify --inject:esbuild.inject.js --define:global=window --format=esm --bundle --outfile=dist/p2pcf.min.js",
