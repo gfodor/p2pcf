@@ -348,7 +348,6 @@ async function handlePost (request, env, context) {
 
   if (payload.d && payload.p) {
     // This is the timestamp on the session side of this data set if this changes, we write to the store
-    const sessionId = payload.d[0]
     const timestamp = payload.t
     const packages = payload.p
     deleteKeyForEntry = getRandomString(24)
@@ -387,7 +386,9 @@ async function handlePost (request, env, context) {
         deleteKeyForEntry
       ]
 
-      const putOptions = { customMetadata: { expireAt: now + payload.x } }
+      // Cap expiration to 15 minutes
+      const expireIn = Math.min(15 * 60 * 1000, payload.x)
+      const putOptions = { customMetadata: { expireAt: now + expireIn } }
 
       // First search for an exisitng one
       for (let i = 0; i < entries.length; i++) {
@@ -463,7 +464,7 @@ async function handlePost (request, env, context) {
 
   // Build the peer payload, list and the packages.
   const map = new Map()
-  let packages = []
+  const packages = []
 
   for (let i = 0; i < entries.length; i++) {
     if (entries[i] === null) continue
@@ -635,8 +636,7 @@ export default {
 
     if (request.headers.get('content-type') !== 'application/json')
       return new Response('Expected content-type application/json', {
-        status: 400,
-        headers
+        status: 400
       })
 
     if (
@@ -650,6 +650,6 @@ export default {
       return await handlePost(request, env, context)
     }
 
-    return new Response('Method not allowed', { status: 405, headers })
+    return new Response('Method not allowed', { status: 405 })
   }
 }
