@@ -7,9 +7,9 @@
 import getBrowserRTC from 'get-browser-rtc'
 import EventEmitter from 'events'
 import Peer from 'simple-peer'
-import { encode as arrayBufferToBase64 } from 'base64-arraybuffer'
+import { encode as arrayBufferToBase64, decode as base64ToArrayBuffer } from 'base64-arraybuffer'
 import { hexToBytes } from 'convert-hex'
-import randomstring from 'random-string'
+import arrayBufferToHex from 'array-buffer-to-hex'
 
 // Based on Chrome
 const MAX_MESSAGE_LENGTH_BYTES = 16000
@@ -67,14 +67,17 @@ const DEFAULT_TURN_ICE = [
   }
 ]
 
+const randomstring = (len) => {
+  const bytes = crypto.getRandomValues(new Uint8Array(len))
+  const str = bytes.reduce((accum, v) => accum + String.fromCharCode(v), '')
+  return btoa(str).replaceAll('=', '')
+}
+
 const ua = window.navigator.userAgent
 const iOS = !!ua.match(/iPad/i) || !!ua.match(/iPhone/i)
 const webkit = !!ua.match(/WebKit/i)
 const iOSSafari = !!(iOS && webkit && !ua.match(/CriOS/i))
 const isFirefox = !!(navigator?.userAgent.toLowerCase().indexOf('firefox') > -1)
-
-const { decode: base64ToArrayBuffer } = require('base64-arraybuffer')
-const arrayBufferToHex = require('array-buffer-to-hex')
 
 const hexToBase64 = hex => arrayBufferToBase64(hexToBytes(hex))
 const base64ToHex = b64 => arrayBufferToHex(base64ToArrayBuffer(b64))
@@ -177,7 +180,7 @@ export default class P2PCF extends EventEmitter {
     this.connectedSessions = []
     this.clientId = clientId
     this.roomId = roomId
-    this.sessionId = randomstring({ length: 20 })
+    this.sessionId = randomstring(20)
     this.packages = []
     this.dataTimestamp = null
     this.lastPackages = null
@@ -224,7 +227,7 @@ export default class P2PCF extends EventEmitter {
       window.history.replaceState(
         {
           ...window.history.state,
-          _p2pcfContextId: randomstring({ length: 20 })
+          _p2pcfContextId: randomstring(20)
         },
         window.location.href
       )
@@ -607,8 +610,8 @@ export default class P2PCF extends EventEmitter {
             remoteDataTimestamp
           )
 
-          const remoteUfrag = randomstring({ length: 12 })
-          const remotePwd = randomstring({ length: 32 })
+          const remoteUfrag = randomstring(12)
+          const remotePwd = randomstring(32)
           const peer = new Peer({
             config: peerOptions,
             iceCompleteTimeout: 3000,
