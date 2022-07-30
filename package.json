@@ -19,6 +19,7 @@
     "buffer": "^6.0.3",
     "convert-hex": "^0.1.0",
     "crypto-browserify": "^3.12.0",
+    "events": "^3.3.0",
     "get-browser-rtc": "^1.1.0",
     "pako": "^2.0.4",
     "process": "^0.11.10",
