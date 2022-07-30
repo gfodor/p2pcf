@@ -76,7 +76,7 @@ Go to https://www.cloudflare.com/ and create an account.
 
 ![image](https://user-images.githubusercontent.com/220020/181832545-e5306fa4-b408-41e0-be07-027dc4eeab41.png)
 
-7. It's highly recommended you ensure your worker is in the `Bundled` usage model, which will increase your free requests by 10x. The worker is very CPU efficient so should work fine in this usage model. You can find it in `Settings`.
+7. If you are on a paid plan, it is highly recommended you ensure your worker is in the `Bundled` usage model, which will increase your unmetered requests by 10x. The worker is very CPU efficient so should work fine in this usage model. You can find it in `Settings`.
 
 ![image](https://user-images.githubusercontent.com/220020/181876578-1368b109-078b-4d3d-9f37-3c8ec00a5901.png)
  
