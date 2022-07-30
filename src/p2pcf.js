@@ -10,7 +10,7 @@ import Peer from 'simple-peer'
 import pako from 'pako'
 import { encode as arrayBufferToBase64 } from 'base64-arraybuffer'
 import { hexToBytes } from 'convert-hex'
-import randomstring from 'randomstring'
+import randomstring from 'random-string'
 
 // Based on Chrome
 const MAX_MESSAGE_LENGTH_BYTES = 16000
@@ -178,7 +178,7 @@ export default class P2PCF extends EventEmitter {
     this.connectedSessions = []
     this.clientId = clientId
     this.roomId = roomId
-    this.sessionId = randomstring.generate({ length: 20 })
+    this.sessionId = randomstring({ length: 20 })
     this.packages = []
     this.dataTimestamp = null
     this.lastPackages = null
@@ -225,7 +225,7 @@ export default class P2PCF extends EventEmitter {
       window.history.replaceState(
         {
           ...window.history.state,
-          _p2pcfContextId: randomstring.generate({ length: 20 })
+          _p2pcfContextId: randomstring({ length: 20 })
         },
         window.location.href
       )
@@ -616,8 +616,8 @@ export default class P2PCF extends EventEmitter {
             remoteDataTimestamp
           )
 
-          const remoteUfrag = randomstring.generate({ length: 12 })
-          const remotePwd = randomstring.generate({ length: 32 })
+          const remoteUfrag = randomstring({ length: 12 })
+          const remotePwd = randomstring({ length: 32 })
           const peer = new Peer({
             config: peerOptions,
             iceCompleteTimeout: 3000,

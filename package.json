@@ -8,7 +8,7 @@
   },
   "main": "src/p2pcf.js",
   "scripts": {
-    "build": "esbuild src/p2pcf.js --inject:esbuild.inject.js --define:global=window --bundle --outfile=dist/p2pcf.js",
+    "build": "esbuild src/p2pcf.js --inject:esbuild.inject.js --define:global=window --format=esm --bundle --outfile=dist/p2pcf.js",
     "build:min": "esbuild src/p2pcf.js --minify --inject:esbuild.inject.js --define:global=window --bundle --outfile=dist/p2pcf.min.js",
     "test": "echo \"No tests.\"",
     "start:worker": "wrangler dev"
@@ -23,7 +23,7 @@
     "get-browser-rtc": "^1.1.0",
     "pako": "^2.0.4",
     "process": "^0.11.10",
-    "randomstring": "^1.2.2",
+    "random-string": "^0.2.0",
     "simple-peer": "^9.11.1",
     "stream-browserify": "^3.0.0"
   },
