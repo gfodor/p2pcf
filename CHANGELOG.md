@@ -1,24 +1,4 @@
-1.0.6
+1.0.10
 -----
 
-Fix metadata.
-
-1.0.5
------
-
-Fix metadata.
-
-1.0.4
------
-
-Fix metadata.
-
-1.0.4
------
-
-Change slow polling rate to 1.5s.
-
-1.0.3
------
-
-Initial release.
+Initial working release.
