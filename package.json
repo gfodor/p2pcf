@@ -1,6 +1,6 @@
 {
   "name": "p2pcf",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "description": "WebRTC signalling using Cloudflare Workers",
   "browser": {
     "crypto": "crypto-browserify",
