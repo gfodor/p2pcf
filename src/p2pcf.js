@@ -7,7 +7,6 @@
 import getBrowserRTC from 'get-browser-rtc'
 import EventEmitter from 'events'
 import Peer from 'simple-peer'
-import pako from 'pako'
 import { encode as arrayBufferToBase64 } from 'base64-arraybuffer'
 import { hexToBytes } from 'convert-hex'
 import randomstring from 'random-string'
@@ -337,17 +336,9 @@ export default class P2PCF extends EventEmitter {
         }
       }
 
-      let body = JSON.stringify(payload)
-      const deflatedBody = arrayBufferToBase64(pako.deflate(body))
+      const body = JSON.stringify(payload)
       const headers = { 'Content-Type': 'application/json ' }
       let keepalive = false
-
-      if (body.length > deflatedBody.length) {
-        body = deflatedBody
-        headers['Content-Type'] = 'application/json'
-        headers['Content-Encoding'] = 'text/plain'
-        headers['Content-Length'] = deflatedBody.length
-      }
 
       if (finish) {
         headers['X-Worker-Method'] = 'DELETE'
