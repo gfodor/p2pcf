@@ -21,7 +21,7 @@
     "crypto-browserify": "^3.12.0",
     "events": "^3.3.0",
     "get-browser-rtc": "^1.1.0",
-    "process": "^0.11.10",
+    "process-fast": "^1.0.0",
     "random-string": "^0.2.0",
     "simple-peer": "^9.11.1",
     "stream-browserify": "^3.0.0"
