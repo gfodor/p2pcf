@@ -4,13 +4,13 @@
  * Licensed under MIT
  */
 
-const getBrowserRTC = require('get-browser-rtc')
-const EventEmitter = require('events')
-const Peer = require('simple-peer')
-const pako = require('pako')
-const { encode: arrayBufferToBase64 } = require('base64-arraybuffer')
-const { hexToBytes } = require('convert-hex')
-const randomstring = require('randomstring')
+import getBrowserRTC from 'get-browser-rtc'
+import EventEmitter from 'events'
+import Peer from 'simple-peer'
+import pako from 'pako'
+import { encode as arrayBufferToBase64 } from 'base64-arraybuffer'
+import { hexToBytes } from 'convert-hex'
+import randomstring from 'randomstring'
 
 // Based on Chrome
 const MAX_MESSAGE_LENGTH_BYTES = 16000
@@ -159,7 +159,7 @@ const parseCandidate = line => {
   return candidate
 }
 
-class P2PCF extends EventEmitter {
+export default class P2PCF extends EventEmitter {
   constructor (clientId = '', roomId = '', options = {}) {
     super()
 
@@ -1213,5 +1213,3 @@ class P2PCF extends EventEmitter {
     })
   }
 }
-
-module.exports = P2PCF
