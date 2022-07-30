@@ -22,7 +22,7 @@
     "events": "^3.3.0",
     "get-browser-rtc": "^1.1.0",
     "pako": "^2.0.4",
-    "process": "^0.11.10",
+    "process-fast": "^1.0.0",
     "random-string": "^0.2.0",
     "simple-peer": "^9.11.1",
     "stream-browserify": "^3.0.0"
