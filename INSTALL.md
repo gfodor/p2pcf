@@ -93,7 +93,7 @@ To use your worker in your client code, specify it as the `workerUrl` in the opt
 ```
 import P2PCF from 'p2pcf'
 
-const p2pcf = new P2PCF('MyUsername', 'MyRoom', { workerUrl: "https://p2pcf.myworker.workers.dev" })
+const p2pcf = new P2PCF('MyUsername', 'MyRoom', { workerUrl: "https://p2pcf.minddrop.workers.dev" })
 ```
 
 That's it! You now have a free (or cheap) WebRTC signalling server that will stay up as long as Cloudflare is working.
