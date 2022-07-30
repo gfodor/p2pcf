@@ -295,31 +295,7 @@ async function handleDelete (request, env, context) {
 async function handlePost (request, env, context) {
   const headers = { ...corsHeaders, Vary: 'Origin' }
 
-  let payload = null
-
-  const textBody = await request.text()
-
-  if (textBody.startsWith('{')) {
-    // Plain JSON
-    payload = JSON.parse(textBody)
-  } else {
-    // Deflated JSON
-    const ds = new DecompressionStream('deflate')
-    const blob = b64toBlob(textBody, 'base64-deflate')
-    blob.stream().pipeThrough(ds)
-    const rdr = ds.readable.getReader()
-    let s = ''
-
-    while (true) {
-      const { value, done } = await rdr.read()
-      s += new TextDecoder().decode(value)
-
-      if (done) break
-    }
-
-    payload = JSON.parse(s)
-  }
-
+  const payload = await request.json()
   const errorResponse = validatePayload(headers, payload)
 
   if (errorResponse) return errorResponse
