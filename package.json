@@ -8,22 +8,18 @@
   },
   "main": "src/p2pcf.js",
   "scripts": {
-    "build": "esbuild src/p2pcf.js --inject:esbuild.inject.js --define:global=window --format=esm --bundle --outfile=dist/p2pcf.js",
-    "build:min": "esbuild src/p2pcf.js --minify --inject:esbuild.inject.js --define:global=window --bundle --outfile=dist/p2pcf.min.js",
+    "build": "esbuild src/p2pcf.js --define:global=window --format=esm --bundle --outfile=dist/p2pcf.js",
+    "build:min": "esbuild src/p2pcf.js --minify --define:global=window --bundle --outfile=dist/p2pcf.min.js",
     "test": "echo \"No tests.\"",
     "start:worker": "wrangler dev"
   },
   "dependencies": {
     "array-buffer-to-hex": "^1.0.0",
     "base64-arraybuffer": "^1.0.2",
-    "buffer": "^6.0.3",
     "convert-hex": "^0.1.0",
-    "crypto-browserify": "^3.12.0",
     "events": "^3.3.0",
     "get-browser-rtc": "^1.1.0",
-    "process-fast": "^1.0.0",
-    "simple-peer": "^9.11.1",
-    "stream-browserify": "^3.0.0"
+    "tiny-simple-peer": "^10.0.0"
   },
   "devDependencies": {
     "airtap": "^4.0.4",
