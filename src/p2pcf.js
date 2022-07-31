@@ -6,13 +6,13 @@
 
 import getBrowserRTC from 'get-browser-rtc'
 import EventEmitter from 'events'
-import Peer from 'simple-peer'
+import Peer from 'tiny-simple-peer'
 import { encode as arrayBufferToBase64 } from 'base64-arraybuffer'
 import { hexToBytes } from 'convert-hex'
 import randomstring from 'random-string'
 
 // Based on Chrome
-const MAX_MESSAGE_LENGTH_BYTES = 16000
+const MAX_MESSAGE_LENGTH_BYTES = 20
 
 const CHUNK_HEADER_LENGTH_BYTES = 12 // 2 magic, 2 msg id, 2 chunk id, 2 for done bit, 4 for length
 const CHUNK_MAGIC_WORD = 8121
@@ -865,10 +865,7 @@ export default class P2PCF extends EventEmitter {
         if (msg.buffer.byteLength === msg.length) {
           dataArrBuffer = msg.buffer
         } else {
-          dataArrBuffer = msg.buffer.slice(
-            msg.byteOffset,
-            msg.byteLength + msg.byteOffset
-          )
+          dataArrBuffer = msg.buffer.slice(0, msg.byteLength)
         }
       } else {
         throw new Error('Unsupported send data type', msg)
@@ -971,7 +968,7 @@ export default class P2PCF extends EventEmitter {
     let target = null
 
     if (!this.msgChunks.has(messageId)) {
-      const totalLength = new Uint32Array(data.buffer, data.byteOffset, 3)[2]
+      const totalLength = new Uint32Array(data, 0, 3)[2]
       target = new Uint8Array(totalLength)
       this.msgChunks.set(messageId, target)
     } else {
@@ -986,15 +983,11 @@ export default class P2PCF extends EventEmitter {
     )
 
     target.set(
-      new Uint8Array(
-        data.buffer,
-        data.byteOffset + CHUNK_HEADER_LENGTH_BYTES,
-        numBytesToSet
-      ),
+      new Uint8Array(data, CHUNK_HEADER_LENGTH_BYTES, numBytesToSet),
       chunkId * CHUNK_MAX_LENGTH_BYTES
     )
 
-    return target
+    return target.buffer
   }
 
   _updateConnectedSessions () {
@@ -1094,16 +1087,12 @@ export default class P2PCF extends EventEmitter {
   }
 
   _checkForSignalOrEmitMessage (peer, msg) {
-    if (msg.buffer.byteLength < SIGNAL_MESSAGE_HEADER_WORDS.length * 2) {
+    if (msg.byteLength < SIGNAL_MESSAGE_HEADER_WORDS.length * 2) {
       this.emit('msg', peer, msg)
       return
     }
 
-    const u16 = new Uint16Array(
-      msg.buffer,
-      msg.byteOffset,
-      SIGNAL_MESSAGE_HEADER_WORDS.length
-    )
+    const u16 = new Uint16Array(msg, 0, SIGNAL_MESSAGE_HEADER_WORDS.length)
 
     for (let i = 0; i < SIGNAL_MESSAGE_HEADER_WORDS.length; i++) {
       if (u16[i] !== SIGNAL_MESSAGE_HEADER_WORDS[i]) {
@@ -1112,10 +1101,7 @@ export default class P2PCF extends EventEmitter {
       }
     }
 
-    const u8 = new Uint8Array(
-      msg.buffer,
-      msg.byteOffset + SIGNAL_MESSAGE_HEADER_WORDS.length * 2
-    )
+    const u8 = new Uint8Array(msg, SIGNAL_MESSAGE_HEADER_WORDS.length * 2)
 
     let payload = new TextDecoder('utf-8').decode(u8)
 
@@ -1136,12 +1122,8 @@ export default class P2PCF extends EventEmitter {
     peer.on('data', data => {
       let messageId = null
       let u16 = null
-      if (data.length >= CHUNK_HEADER_LENGTH_BYTES) {
-        u16 = new Uint16Array(
-          data.buffer,
-          data.byteOffset,
-          CHUNK_HEADER_LENGTH_BYTES / 2
-        )
+      if (data.byteLength >= CHUNK_HEADER_LENGTH_BYTES) {
+        u16 = new Uint16Array(data, 0, CHUNK_HEADER_LENGTH_BYTES / 2)
 
         if (u16[0] === CHUNK_MAGIC_WORD) {
           messageId = u16[1]

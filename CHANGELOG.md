@@ -1,3 +1,8 @@
+1.2.0
+-----
+
+Migrate to using tiny-simple-peer to reduce bundle size and improve performance.
+
 1.1.0
 -----
 
