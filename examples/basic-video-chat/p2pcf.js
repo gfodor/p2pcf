@@ -562,12 +562,12 @@ var require_common = __commonJS({
           if (!debug.enabled) {
             return;
           }
-          const self2 = debug;
+          const self = debug;
           const curr = Number(new Date());
           const ms = curr - (prevTime || curr);
-          self2.diff = ms;
-          self2.prev = prevTime;
-          self2.curr = curr;
+          self.diff = ms;
+          self.prev = prevTime;
+          self.curr = curr;
           prevTime = curr;
           args[0] = createDebug.coerce(args[0]);
           if (typeof args[0] !== "string") {
@@ -582,15 +582,15 @@ var require_common = __commonJS({
             const formatter = createDebug.formatters[format];
             if (typeof formatter === "function") {
               const val = args[index];
-              match = formatter.call(self2, val);
+              match = formatter.call(self, val);
               args.splice(index, 1);
               index--;
             }
             return match;
           });
-          createDebug.formatArgs.call(self2, args);
-          const logFn = self2.log || createDebug.log;
-          logFn.apply(self2, args);
+          createDebug.formatArgs.call(self, args);
+          const logFn = self.log || createDebug.log;
+          logFn.apply(self, args);
         }
         debug.namespace = namespace;
         debug.useColors = createDebug.useColors();
@@ -872,20 +872,20 @@ var require_random_string = __commonJS({
       };
     }
     function _buildChars(opts) {
-      var chars = "";
+      var chars2 = "";
       if (opts.numeric) {
-        chars += numbers;
+        chars2 += numbers;
       }
       if (opts.letters) {
-        chars += letters;
+        chars2 += letters;
       }
       if (opts.special) {
-        chars += specials;
+        chars2 += specials;
       }
       for (var i = 0; i <= opts.exclude.length; i++) {
-        chars = chars.replace(opts.exclude[i], "");
+        chars2 = chars2.replace(opts.exclude[i], "");
       }
-      return chars;
+      return chars2;
     }
     module.exports = function randomString(opts) {
       opts = _defaults(opts);
@@ -1814,60 +1814,6 @@ var require_tiny_simple_peer = __commonJS({
   }
 });
 
-// node_modules/base64-arraybuffer/dist/base64-arraybuffer.umd.js
-var require_base64_arraybuffer_umd = __commonJS({
-  "node_modules/base64-arraybuffer/dist/base64-arraybuffer.umd.js"(exports, module) {
-    (function(global2, factory) {
-      typeof exports === "object" && typeof module !== "undefined" ? factory(exports) : typeof define === "function" && define.amd ? define(["exports"], factory) : (global2 = typeof globalThis !== "undefined" ? globalThis : global2 || self, factory(global2["base64-arraybuffer"] = {}));
-    })(exports, function(exports2) {
-      "use strict";
-      var chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-      var lookup = typeof Uint8Array === "undefined" ? [] : new Uint8Array(256);
-      for (var i = 0; i < chars.length; i++) {
-        lookup[chars.charCodeAt(i)] = i;
-      }
-      var encode = function(arraybuffer) {
-        var bytes = new Uint8Array(arraybuffer), i2, len = bytes.length, base64 = "";
-        for (i2 = 0; i2 < len; i2 += 3) {
-          base64 += chars[bytes[i2] >> 2];
-          base64 += chars[(bytes[i2] & 3) << 4 | bytes[i2 + 1] >> 4];
-          base64 += chars[(bytes[i2 + 1] & 15) << 2 | bytes[i2 + 2] >> 6];
-          base64 += chars[bytes[i2 + 2] & 63];
-        }
-        if (len % 3 === 2) {
-          base64 = base64.substring(0, base64.length - 1) + "=";
-        } else if (len % 3 === 1) {
-          base64 = base64.substring(0, base64.length - 2) + "==";
-        }
-        return base64;
-      };
-      var decode = function(base64) {
-        var bufferLength = base64.length * 0.75, len = base64.length, i2, p = 0, encoded1, encoded2, encoded3, encoded4;
-        if (base64[base64.length - 1] === "=") {
-          bufferLength--;
-          if (base64[base64.length - 2] === "=") {
-            bufferLength--;
-          }
-        }
-        var arraybuffer = new ArrayBuffer(bufferLength), bytes = new Uint8Array(arraybuffer);
-        for (i2 = 0; i2 < len; i2 += 4) {
-          encoded1 = lookup[base64.charCodeAt(i2)];
-          encoded2 = lookup[base64.charCodeAt(i2 + 1)];
-          encoded3 = lookup[base64.charCodeAt(i2 + 2)];
-          encoded4 = lookup[base64.charCodeAt(i2 + 3)];
-          bytes[p++] = encoded1 << 2 | encoded2 >> 4;
-          bytes[p++] = (encoded2 & 15) << 4 | encoded3 >> 2;
-          bytes[p++] = (encoded3 & 3) << 6 | encoded4 & 63;
-        }
-        return arraybuffer;
-      };
-      exports2.decode = decode;
-      exports2.encode = encode;
-      Object.defineProperty(exports2, "__esModule", { value: true });
-    });
-  }
-});
-
 // node_modules/convert-hex/convert-hex.js
 var require_convert_hex = __commonJS({
   "node_modules/convert-hex/convert-hex.js"(exports, module) {
@@ -1929,9 +1875,53 @@ var require_array_buffer_to_hex = __commonJS({
 var import_get_browser_rtc = __toESM(require_get_browser_rtc());
 var import_events = __toESM(require_events());
 var import_tiny_simple_peer = __toESM(require_tiny_simple_peer());
-var import_base64_arraybuffer = __toESM(require_base64_arraybuffer_umd());
+
+// node_modules/base64-arraybuffer/dist/base64-arraybuffer.es5.js
+var chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+var lookup = typeof Uint8Array === "undefined" ? [] : new Uint8Array(256);
+for (i = 0; i < chars.length; i++) {
+  lookup[chars.charCodeAt(i)] = i;
+}
+var i;
+var encode = function(arraybuffer) {
+  var bytes = new Uint8Array(arraybuffer), i, len = bytes.length, base64 = "";
+  for (i = 0; i < len; i += 3) {
+    base64 += chars[bytes[i] >> 2];
+    base64 += chars[(bytes[i] & 3) << 4 | bytes[i + 1] >> 4];
+    base64 += chars[(bytes[i + 1] & 15) << 2 | bytes[i + 2] >> 6];
+    base64 += chars[bytes[i + 2] & 63];
+  }
+  if (len % 3 === 2) {
+    base64 = base64.substring(0, base64.length - 1) + "=";
+  } else if (len % 3 === 1) {
+    base64 = base64.substring(0, base64.length - 2) + "==";
+  }
+  return base64;
+};
+var decode = function(base64) {
+  var bufferLength = base64.length * 0.75, len = base64.length, i, p = 0, encoded1, encoded2, encoded3, encoded4;
+  if (base64[base64.length - 1] === "=") {
+    bufferLength--;
+    if (base64[base64.length - 2] === "=") {
+      bufferLength--;
+    }
+  }
+  var arraybuffer = new ArrayBuffer(bufferLength), bytes = new Uint8Array(arraybuffer);
+  for (i = 0; i < len; i += 4) {
+    encoded1 = lookup[base64.charCodeAt(i)];
+    encoded2 = lookup[base64.charCodeAt(i + 1)];
+    encoded3 = lookup[base64.charCodeAt(i + 2)];
+    encoded4 = lookup[base64.charCodeAt(i + 3)];
+    bytes[p++] = encoded1 << 2 | encoded2 >> 4;
+    bytes[p++] = (encoded2 & 15) << 4 | encoded3 >> 2;
+    bytes[p++] = (encoded3 & 3) << 6 | encoded4 & 63;
+  }
+  return arraybuffer;
+};
+
+// src/p2pcf.js
 var import_convert_hex = __toESM(require_convert_hex());
-var import_random_string = __toESM(require_random_string());
+var import_array_buffer_to_hex = __toESM(require_array_buffer_to_hex());
 var MAX_MESSAGE_LENGTH_BYTES = 20;
 var CHUNK_HEADER_LENGTH_BYTES = 12;
 var CHUNK_MAGIC_WORD = 8121;
@@ -1977,15 +1967,18 @@ var DEFAULT_TURN_ICE = [
     credential: "openrelayproject"
   }
 ];
+var randomstring = (len) => {
+  const bytes = crypto.getRandomValues(new Uint8Array(len));
+  const str = bytes.reduce((accum, v) => accum + String.fromCharCode(v), "");
+  return btoa(str).replaceAll("=", "");
+};
 var ua = window.navigator.userAgent;
 var iOS = !!ua.match(/iPad/i) || !!ua.match(/iPhone/i);
 var webkit = !!ua.match(/WebKit/i);
 var iOSSafari = !!(iOS && webkit && !ua.match(/CriOS/i));
 var isFirefox = !!(navigator?.userAgent.toLowerCase().indexOf("firefox") > -1);
-var { decode: base64ToArrayBuffer } = require_base64_arraybuffer_umd();
-var arrayBufferToHex = require_array_buffer_to_hex();
-var hexToBase64 = (hex) => (0, import_base64_arraybuffer.encode)((0, import_convert_hex.hexToBytes)(hex));
-var base64ToHex = (b64) => arrayBufferToHex(base64ToArrayBuffer(b64));
+var hexToBase64 = (hex) => encode((0, import_convert_hex.hexToBytes)(hex));
+var base64ToHex = (b64) => (0, import_array_buffer_to_hex.default)(decode(b64));
 function createSdp(isOffer, iceUFrag, icePwd, dtlsFingerprintBase64) {
   const dtlsHex = base64ToHex(dtlsFingerprintBase64);
   let dtlsFingerprint = "";
@@ -2067,7 +2060,7 @@ var P2PCF = class extends import_events.default {
     this.connectedSessions = [];
     this.clientId = clientId;
     this.roomId = roomId;
-    this.sessionId = (0, import_random_string.default)({ length: 20 });
+    this.sessionId = randomstring(20);
     this.packages = [];
     this.dataTimestamp = null;
     this.lastPackages = null;
@@ -2102,7 +2095,7 @@ var P2PCF = class extends import_events.default {
       window.history.replaceState(
         {
           ...window.history.state,
-          _p2pcfContextId: (0, import_random_string.default)({ length: 20 })
+          _p2pcfContextId: randomstring(20)
         },
         window.location.href
       );
@@ -2372,8 +2365,8 @@ var P2PCF = class extends import_events.default {
             remoteSessionId,
             remoteDataTimestamp
           );
-          const remoteUfrag = (0, import_random_string.default)({ length: 12 });
-          const remotePwd = (0, import_random_string.default)({ length: 32 });
+          const remoteUfrag = randomstring(12);
+          const remotePwd = randomstring(32);
           const peer2 = new import_tiny_simple_peer.default({
             config: peerOptions,
             iceCompleteTimeout: 3e3,

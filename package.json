@@ -2,10 +2,6 @@
   "name": "p2pcf",
   "version": "1.1.0",
   "description": "WebRTC signalling using Cloudflare Workers",
-  "browser": {
-    "crypto": "crypto-browserify",
-    "stream": "stream-browserify"
-  },
   "main": "src/p2pcf.js",
   "scripts": {
     "build": "esbuild src/p2pcf.js --define:global=window --format=esm --bundle --outfile=dist/p2pcf.js",

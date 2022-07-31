@@ -4,6 +4,8 @@
  * Licensed under MIT
  */
 
+/* global crypto */
+
 import getBrowserRTC from 'get-browser-rtc'
 import EventEmitter from 'events'
 import Peer from 'tiny-simple-peer'
