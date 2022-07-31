@@ -1922,7 +1922,7 @@ var decode = function(base64) {
 // src/p2pcf.js
 var import_convert_hex = __toESM(require_convert_hex());
 var import_array_buffer_to_hex = __toESM(require_array_buffer_to_hex());
-var MAX_MESSAGE_LENGTH_BYTES = 20;
+var MAX_MESSAGE_LENGTH_BYTES = 16e3;
 var CHUNK_HEADER_LENGTH_BYTES = 12;
 var CHUNK_MAGIC_WORD = 8121;
 var CHUNK_MAX_LENGTH_BYTES = MAX_MESSAGE_LENGTH_BYTES - CHUNK_HEADER_LENGTH_BYTES;
