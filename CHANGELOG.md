@@ -3,6 +3,8 @@
 
 Migrate to using tiny-simple-peer to reduce bundle size and improve performance.
 
+Fix up entropy issues with ICE credentials.
+
 1.1.0
 -----
 
