@@ -873,7 +873,7 @@ export default class P2PCF extends EventEmitter {
         if (msg.buffer.byteLength === msg.length) {
           dataArrBuffer = msg.buffer
         } else {
-          dataArrBuffer = msg.buffer.slice(0, msg.byteLength)
+          dataArrBuffer = msg.buffer.slice(msg.byteOffset, msg.byteLength)
         }
       } else {
         throw new Error('Unsupported send data type', msg)
