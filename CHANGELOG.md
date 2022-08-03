@@ -1,3 +1,8 @@
+1.3.2
+-----
+
+Add ability to pass proprietary constraints to RTCPeerConnnection.
+
 1.3.1
 -----
 

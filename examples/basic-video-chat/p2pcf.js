@@ -983,6 +983,7 @@ var require_tiny_simple_peer = __commonJS({
         this.channelConfig = opts.channelConfig || Peer2.channelConfig;
         this.channelNegotiated = this.channelConfig.negotiated;
         this.config = Object.assign({}, Peer2.config, opts.config);
+        this.proprietaryConstraints = Object.assign({}, Peer2.proprietaryConstraints, opts.proprietaryConstraints);
         this.offerOptions = opts.offerOptions || {};
         this.answerOptions = opts.answerOptions || {};
         this.sdpTransform = opts.sdpTransform || ((sdp) => sdp);
@@ -1026,7 +1027,7 @@ var require_tiny_simple_peer = __commonJS({
         this._cb = null;
         this._interval = null;
         try {
-          this._pc = new this._wrtc.RTCPeerConnection(this.config);
+          this._pc = new this._wrtc.RTCPeerConnection(this.config, this.proprietaryConstraints);
         } catch (err) {
           this.destroy(errCode(err, "ERR_PC_CONSTRUCTOR"));
           return;
@@ -1810,6 +1811,7 @@ var require_tiny_simple_peer = __commonJS({
       sdpSemantics: "unified-plan"
     };
     Peer2.channelConfig = {};
+    Peer2.proprietaryConstraints = {};
     module.exports = Peer2;
   }
 });
@@ -2080,6 +2082,7 @@ var P2PCF = class extends import_events.default {
     this.packageReceivedFromPeers = /* @__PURE__ */ new Set();
     this.startedAtTimestamp = null;
     this.peerOptions = options.rtcPeerConnectionOptions || {};
+    this.peerProprietaryConstraints = options.rtcPeerConnectionProprietaryConstraints || {};
     this.peerSdpTransform = options.sdpTransform || ((sdp) => sdp);
     this.workerUrl = options.workerUrl || "https://p2pcf.minddrop.workers.dev";
     if (this.workerUrl.endsWith("/")) {
@@ -2313,6 +2316,7 @@ var P2PCF = class extends import_events.default {
           config: peerOptions,
           initiator: false,
           iceCompleteTimeout: 3e3,
+          proprietaryConstraints: this.rtcPeerConnectionProprietaryConstraints,
           sdpTransform: (sdp) => {
             const lines = [];
             for (const l of sdp.split("\r\n")) {
@@ -2378,6 +2382,7 @@ var P2PCF = class extends import_events.default {
           const remotePwd = randomstring(32);
           const peer2 = new import_tiny_simple_peer.default({
             config: peerOptions,
+            proprietaryConstraints: this.rtcPeerConnectionProprietaryConstraints,
             iceCompleteTimeout: 3e3,
             initiator: true,
             sdpTransform: this.peerSdpTransform

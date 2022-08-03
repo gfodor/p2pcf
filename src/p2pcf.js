@@ -206,6 +206,7 @@ export default class P2PCF extends EventEmitter {
     this.packageReceivedFromPeers = new Set()
     this.startedAtTimestamp = null
     this.peerOptions = options.rtcPeerConnectionOptions || {}
+    this.peerProprietaryConstraints = options.rtcPeerConnectionProprietaryConstraints || {}
     this.peerSdpTransform = options.sdpTransform || ((sdp) => sdp)
 
     this.workerUrl = options.workerUrl || 'https://p2pcf.minddrop.workers.dev'
@@ -537,6 +538,7 @@ export default class P2PCF extends EventEmitter {
           config: peerOptions,
           initiator: false,
           iceCompleteTimeout: 3000,
+          proprietaryConstraints: this.rtcPeerConnectionProprietaryConstraints,
           sdpTransform: sdp => {
             const lines = []
 
@@ -627,6 +629,7 @@ export default class P2PCF extends EventEmitter {
           const remotePwd = randomstring(32)
           const peer = new Peer({
             config: peerOptions,
+            proprietaryConstraints: this.rtcPeerConnectionProprietaryConstraints,
             iceCompleteTimeout: 3000,
             initiator: true,
             sdpTransform: this.peerSdpTransform

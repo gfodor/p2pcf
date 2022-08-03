@@ -66,6 +66,9 @@ const p2pcf = new P2PCF(client_id, room_id, {
   // Options to pass to RTCPeerConnection constructor (optional)
   rtcPeerConnectionOptions: {},
 
+  // Proprietary constraints to pass to RTCPeerConnection constructor (optional)
+  rtcPeerConnectionProprietaryConstraints: {},
+
   // SDP transform function (optional)
   sdpTransform: sdp => sdp
 });
