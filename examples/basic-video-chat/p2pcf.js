@@ -2550,7 +2550,7 @@ var P2PCF = class extends import_events.default {
         if (msg.buffer.byteLength === msg.length) {
           dataArrBuffer = msg.buffer;
         } else {
-          dataArrBuffer = msg.buffer.slice(msg.byteOffset, msg.byteLength);
+          dataArrBuffer = msg.buffer.slice(msg.byteOffset, msg.byteOffset + msg.byteLength);
         }
       } else {
         throw new Error("Unsupported send data type", msg);
