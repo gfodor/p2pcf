@@ -25,7 +25,7 @@ A basic chat + video sharing example demonstrates the library at https://gfodor.
 
 Basic usage:
 
-```
+```js
 import P2PCF from 'p2pcf'
 
 const client_id = 'MyUsername'
