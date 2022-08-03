@@ -2253,7 +2253,8 @@ var P2PCF = class extends import_events.default {
       lastProcessedReceivedDataTimestamps,
       packageReceivedFromPeers,
       stunIceServers,
-      turnIceServers
+      turnIceServers,
+      peersToRecreateOnClose
     } = this;
     const [localSessionId, , localSymmetric] = localPeerData;
     const now = new Date().getTime();
@@ -2280,6 +2281,8 @@ var P2PCF = class extends import_events.default {
       }
       if (isPeerA) {
         if (peers.has(remoteSessionId))
+          continue;
+        if (peersToRecreateOnClose.has(remoteSessionId))
           continue;
         if (!remotePackage)
           continue;
@@ -2361,7 +2364,7 @@ var P2PCF = class extends import_events.default {
         }
         peer.signal({ type: "offer", sdp: remoteSdp });
       } else {
-        if (!peers.has(remoteSessionId)) {
+        if (!peers.has(remoteSessionId) && !peersToRecreateOnClose.has(remoteSessionId)) {
           lastProcessedReceivedDataTimestamps.set(
             remoteSessionId,
             remoteDataTimestamp
