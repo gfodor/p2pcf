@@ -80,6 +80,18 @@ const randomstring = len => {
 
 const textToArr = new TextDecoder('utf-8').decode
 const arrToText = new TextEncoder().encode
+const removeInPlace = (a, condition) => {
+  let i = 0; let j = 0
+
+  while (i < a.length) {
+    const val = a[i]
+    if (!condition(val, i, a)) a[j++] = val
+    i++
+  }
+
+  a.length = j
+  return a
+}
 
 const ua = window.navigator.userAgent
 const iOS = !!ua.match(/iPad/i) || !!ua.match(/iPhone/i)
@@ -195,6 +207,8 @@ export default class P2PCF extends EventEmitter {
     this.lastProcessedReceivedDataTimestamps = new Map()
     this.packageReceivedFromPeers = new Set()
     this.startedAtTimestamp = null
+    this.peerOptions = options.rtcPeerConnectionOptions || {}
+    this.peerSdpTransform = options.sdpTransform || ((sdp) => sdp)
 
     this.workerUrl = options.workerUrl || 'https://p2pcf.minddrop.workers.dev'
 
@@ -219,8 +233,8 @@ export default class P2PCF extends EventEmitter {
     this.dtlsCert = null
     this.udpEnabled = null
     this.isSymmetric = null
-    this.reflexiveIps = null
     this.dtlsFingerprint = null
+    this.reflexiveIps = new Set()
 
     // step
     this.isSending = false
@@ -315,17 +329,10 @@ export default class P2PCF extends EventEmitter {
 
         // Compact packages, expire any of them sent more than a minute ago.
         // (ICE will timeout by then, even if other latency fails us.)
-        for (let i = 0; i < packages.length; i++) {
-          const sentAt = packages[i][packages[i].length - 2]
-
-          if (now - sentAt > 60 * 1000) {
-            packages[i] = null
-          }
-        }
-
-        while (packages.indexOf(null) >= 0) {
-          packages.splice(packages.indexOf(null), 1)
-        }
+        removeInPlace(packages, pkg => {
+          const sentAt = pkg[pkg.length - 2]
+          return now - sentAt > 60 * 1000
+        })
 
         includePackages = true
       }
@@ -491,7 +498,7 @@ export default class P2PCF extends EventEmitter {
       const delaySetRemoteUntilReceiveCandidates = isFirefox
       const remotePackage = remotePackages.find(p => p[1] === remoteSessionId)
 
-      const peerOptions = { iceServers }
+      const peerOptions = { ...this.peerOptions, iceServers }
 
       if (localDtlsCert) {
         peerOptions.certificates = [localDtlsCert]
@@ -545,7 +552,7 @@ export default class P2PCF extends EventEmitter {
               }
             }
 
-            return lines.join('\r\n')
+            return this.peerSdpTransform(lines.join('\r\n'))
           }
         })
 
@@ -623,7 +630,8 @@ export default class P2PCF extends EventEmitter {
           const peer = new Peer({
             config: peerOptions,
             iceCompleteTimeout: 3000,
-            initiator: true
+            initiator: true,
+            sdpTransform: this.peerSdpTransform
           })
 
           peer.id = remoteSessionId
@@ -788,37 +796,21 @@ export default class P2PCF extends EventEmitter {
         newDtlsFingerprint
       ] = await this._getNetworkSettings(this.dtlsCert)
 
-      let retainedAnyReflexiveIps = false
-
-      for (const oldIp of this.reflexiveIps) {
-        for (const newIp of newReflexiveIps) {
-          if (oldIp === newIp) retainedAnyReflexiveIps = true
-        }
-      }
-
       if (
         newUdpEnabled !== this.udpEnabled ||
         newIsSymmetric !== this.isSymmetric ||
         newDtlsFingerprint !== this.dtlsFingerprint ||
-        !retainedAnyReflexiveIps
+        !![...newReflexiveIps].find(ip => ![...this.reflexiveIps].find(ip2 => ip === ip2)) ||
+        !![...reflexiveIps].find(ip => ![...newReflexiveIps].find(ip2 => ip === ip2))
       ) {
-        // Network reset, clear all peers
-        this.packages.length = 0
-
-        for (const peer of this.peers.values()) {
-          this._removePeer(peer, true)
-
-          // Re-process the last incoming messages from all peers too right away
-          this.lastProcessedReceivedDataTimestamps.delete(peer.id)
-        }
-
+        // Network changed, force pushing new data
         this.dataTimestamp = null
-        this.lastPackages = null
-        this.udpEnabled = newUdpEnabled
-        this.isSymmetric = newIsSymmetric
-        this.reflexiveIps = newReflexiveIps
-        this.dtlsFingerprint = newDtlsFingerprint
       }
+
+      this.udpEnabled = newUdpEnabled
+      this.isSymmetric = newIsSymmetric
+      this.reflexiveIps = newReflexiveIps
+      this.dtlsFingerprint = newDtlsFingerprint
     }, this.networkChangePollIntervalMs)
 
     this._step = this._step.bind(this)
@@ -834,16 +826,7 @@ export default class P2PCF extends EventEmitter {
     const { packageReceivedFromPeers, packages, peers } = this
     if (!peers.has(peer.id)) return
 
-    for (let i = 0; i < packages.length; i++) {
-      if (packages[i][0] === peer.id) {
-        packages[i] = null
-      }
-    }
-
-    while (packages.indexOf(null) >= 0) {
-      packages.splice(packages.indexOf(null), 1)
-    }
-
+    removeInPlace(packages, pkg => pkg[0] === peer.id)
     packageReceivedFromPeers.delete(peer.id)
 
     peers.delete(peer.id)
@@ -1127,6 +1110,9 @@ export default class P2PCF extends EventEmitter {
   _wireUpCommonPeerEvents (peer) {
     peer.on('connect', () => {
       this.emit('peerconnect', peer)
+
+      // Remove packages for the peer once connected
+      removeInPlace(this.packages, pkg => pkg[0] === peer.id)
       this._updateConnectedSessions()
     })
 
@@ -1157,9 +1143,8 @@ export default class P2PCF extends EventEmitter {
       }
     })
 
-    peer.on('error', () => {
-      this._removePeer(peer)
-      this._updateConnectedSessions()
+    peer.on('error', err => {
+      console.warn(err)
     })
 
     peer.on('close', () => {

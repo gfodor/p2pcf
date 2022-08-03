@@ -34,14 +34,14 @@ const room_id = 'MyRoom'
 const p2pcf = new P2PCF(client_id, room_id, {
   // Worker URL (optional) - if left out, will use a public worker
   workerUrl: '<your worker url>',
-  
+
   // STUN ICE servers (optional)
   // If left out, will use public STUN from Google + Twilio
-  stunIceServers: <your STUN servers>,
+  stunIceServers: { ... },
   
   // TURN ICE servers (optional)
   // If left out, will use openrelay public TURN servers from metered.ca
-  turnIceServers: <your TURN servers>,
+  turnIceServers: { ... },
   
   // Network change poll interval (milliseconds, optional, default: 15000, 15 seconds)
   // Interval to poll STUN for network changes + reconnect
@@ -62,6 +62,12 @@ const p2pcf = new P2PCF(client_id, room_id, {
   // Slow polling rate (milliseconds, optional, default: 1500, 1.5 seconds)
   // Polling rate when state is idle
   slowPollingRateMs: ...,
+
+  // Options to pass to RTCPeerConnection constructor (optional)
+  rtcPeerConnectionOptions: {},
+
+  // SDP transform function (optional)
+  sdpTransform: sdp => sdp
 });
 
 // Start polling
