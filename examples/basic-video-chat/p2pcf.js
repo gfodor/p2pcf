@@ -2079,6 +2079,8 @@ var P2PCF = class extends import_events.default {
     this.lastProcessedReceivedDataTimestamps = /* @__PURE__ */ new Map();
     this.packageReceivedFromPeers = /* @__PURE__ */ new Set();
     this.startedAtTimestamp = null;
+    this.peerOptions = options.rtcPeerConnectionOptions || {};
+    this.peerSdpTransform = options.sdpTransform || ((sdp) => sdp);
     this.workerUrl = options.workerUrl || "https://p2pcf.minddrop.workers.dev";
     if (this.workerUrl.endsWith("/")) {
       this.workerUrl = this.workerUrl.substring(0, this.workerUrl.length - 1);
@@ -2280,7 +2282,7 @@ var P2PCF = class extends import_events.default {
       const iceServers = localSymmetric || remoteSymmetric ? turnIceServers : stunIceServers;
       const delaySetRemoteUntilReceiveCandidates = isFirefox;
       const remotePackage = remotePackages.find((p) => p[1] === remoteSessionId);
-      const peerOptions = { iceServers };
+      const peerOptions = { ...this.peerOptions, iceServers };
       if (localDtlsCert) {
         peerOptions.certificates = [localDtlsCert];
       }
@@ -2322,7 +2324,7 @@ var P2PCF = class extends import_events.default {
                 lines.push(l);
               }
             }
-            return lines.join("\r\n");
+            return this.peerSdpTransform(lines.join("\r\n"));
           }
         });
         peer.id = remoteSessionId;
@@ -2377,7 +2379,8 @@ var P2PCF = class extends import_events.default {
           const peer2 = new import_tiny_simple_peer.default({
             config: peerOptions,
             iceCompleteTimeout: 3e3,
-            initiator: true
+            initiator: true,
+            sdpTransform: this.peerSdpTransform
           });
           peer2.id = remoteSessionId;
           peer2.client_id = remoteClientId;

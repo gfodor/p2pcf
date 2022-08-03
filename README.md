@@ -34,7 +34,7 @@ const room_id = 'MyRoom'
 const p2pcf = new P2PCF(client_id, room_id, {
   // Worker URL (optional) - if left out, will use a public worker
   workerUrl: '<your worker url>',
-  
+
   // STUN ICE servers (optional)
   // If left out, will use public STUN from Google + Twilio
   stunIceServers: <your STUN servers>,
@@ -62,6 +62,12 @@ const p2pcf = new P2PCF(client_id, room_id, {
   // Slow polling rate (milliseconds, optional, default: 1500, 1.5 seconds)
   // Polling rate when state is idle
   slowPollingRateMs: ...,
+
+  // Options to pass to RTCPeerConnection constructor (optional)
+  rtcPeerConnectionOptions: {},
+
+  // SDP transform function (optional)
+  sdpTransform: sdp => sdp
 });
 
 // Start polling
