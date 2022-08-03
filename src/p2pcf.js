@@ -444,7 +444,8 @@ export default class P2PCF extends EventEmitter {
       lastProcessedReceivedDataTimestamps,
       packageReceivedFromPeers,
       stunIceServers,
-      turnIceServers
+      turnIceServers,
+      peersToRecreateOnClose
     } = this
     const [localSessionId, , localSymmetric] = localPeerData
 
@@ -497,6 +498,7 @@ export default class P2PCF extends EventEmitter {
 
       if (isPeerA) {
         if (peers.has(remoteSessionId)) continue
+        if (peersToRecreateOnClose.has(remoteSessionId)) continue
         if (!remotePackage) continue
 
         lastProcessedReceivedDataTimestamps.set(
@@ -610,7 +612,7 @@ export default class P2PCF extends EventEmitter {
         //     so peer reflexive candidates for it show up.
         //   - Let trickle run, then once trickle finishes send a package for A to pick up = [my session id, my offer sdp, generated ufrag/pwd, dtls fingerprint, ice candidates]
         //   - keep the icecandidate listener active, and add the pfrlx candidates when they arrive (but don't send another package)
-        if (!peers.has(remoteSessionId)) {
+        if (!peers.has(remoteSessionId) && !peersToRecreateOnClose.has(remoteSessionId)) {
           lastProcessedReceivedDataTimestamps.set(
             remoteSessionId,
             remoteDataTimestamp
@@ -800,7 +802,7 @@ export default class P2PCF extends EventEmitter {
         newDtlsFingerprint !== this.dtlsFingerprint ||
         !retainedAnyReflexiveIps
       ) {
-        // Network reset, clear all peers
+        // Network reset, re-create all peers once they disconnect
         this.packages.length = 0
 
         for (const peer of this.peers.values()) {
