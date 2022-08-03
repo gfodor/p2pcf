@@ -2065,6 +2065,7 @@ var P2PCF = class extends import_events.default {
     this.dataTimestamp = null;
     this.lastPackages = null;
     this.lastProcessedReceivedDataTimestamps = /* @__PURE__ */ new Map();
+    this.peersToRecreateOnClose = /* @__PURE__ */ new Set();
     this.packageReceivedFromPeers = /* @__PURE__ */ new Set();
     this.startedAtTimestamp = null;
     this.workerUrl = options.workerUrl || "https://p2pcf.minddrop.workers.dev";
@@ -2503,8 +2504,7 @@ var P2PCF = class extends import_events.default {
       if (newUdpEnabled !== this.udpEnabled || newIsSymmetric !== this.isSymmetric || newDtlsFingerprint !== this.dtlsFingerprint || !retainedAnyReflexiveIps) {
         this.packages.length = 0;
         for (const peer of this.peers.values()) {
-          this._removePeer(peer, true);
-          this.lastProcessedReceivedDataTimestamps.delete(peer.id);
+          this.peersToRecreateOnClose.add(peer.id);
         }
         this.dataTimestamp = null;
         this.lastPackages = null;
@@ -2550,7 +2550,7 @@ var P2PCF = class extends import_events.default {
         if (msg.buffer.byteLength === msg.length) {
           dataArrBuffer = msg.buffer;
         } else {
-          dataArrBuffer = msg.buffer.slice(msg.byteOffset, msg.byteLength);
+          dataArrBuffer = msg.buffer.slice(msg.byteOffset, msg.byteOffset + msg.byteLength);
         }
       } else {
         throw new Error("Unsupported send data type", msg);
@@ -2758,6 +2758,10 @@ var P2PCF = class extends import_events.default {
       this._updateConnectedSessions();
     });
     peer.on("close", () => {
+      if (this.peersToRecreateOnClose.has(peer.id)) {
+        this.lastProcessedReceivedDataTimestamps.delete(peer.id);
+        this.peersToRecreateOnClose.delete(peer.id);
+      }
       this._removePeer(peer);
       this._updateConnectedSessions();
     });

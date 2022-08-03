@@ -190,6 +190,7 @@ export default class P2PCF extends EventEmitter {
     this.dataTimestamp = null
     this.lastPackages = null
     this.lastProcessedReceivedDataTimestamps = new Map()
+    this.peersToRecreateOnClose = new Set()
     this.packageReceivedFromPeers = new Set()
     this.startedAtTimestamp = null
 
@@ -803,10 +804,7 @@ export default class P2PCF extends EventEmitter {
         this.packages.length = 0
 
         for (const peer of this.peers.values()) {
-          this._removePeer(peer, true)
-
-          // Re-process the last incoming messages from all peers too right away
-          this.lastProcessedReceivedDataTimestamps.delete(peer.id)
+          this.peersToRecreateOnClose.add(peer.id)
         }
 
         this.dataTimestamp = null
@@ -1160,6 +1158,13 @@ export default class P2PCF extends EventEmitter {
     })
 
     peer.on('close', () => {
+      // On a network change, we expected this, so cleanly restart it
+      if (this.peersToRecreateOnClose.has(peer.id)) {
+        // Re-process the last incoming messages from the peer to re-create it
+        this.lastProcessedReceivedDataTimestamps.delete(peer.id)
+        this.peersToRecreateOnClose.delete(peer.id)
+      }
+
       this._removePeer(peer)
       this._updateConnectedSessions()
     })
