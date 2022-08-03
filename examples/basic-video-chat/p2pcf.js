@@ -2316,7 +2316,7 @@ var P2PCF = class extends import_events.default {
           config: peerOptions,
           initiator: false,
           iceCompleteTimeout: 3e3,
-          proprietaryConstraints: this.rtcPeerConnectionProprietaryConstraints,
+          proprietaryConstraints: this.peerProprietaryConstraints,
           sdpTransform: (sdp) => {
             const lines = [];
             for (const l of sdp.split("\r\n")) {

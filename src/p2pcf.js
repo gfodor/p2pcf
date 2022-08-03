@@ -538,7 +538,7 @@ export default class P2PCF extends EventEmitter {
           config: peerOptions,
           initiator: false,
           iceCompleteTimeout: 3000,
-          proprietaryConstraints: this.rtcPeerConnectionProprietaryConstraints,
+          proprietaryConstraints: this.peerProprietaryConstraints,
           sdpTransform: sdp => {
             const lines = []
 
