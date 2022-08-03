@@ -37,11 +37,11 @@ const p2pcf = new P2PCF(client_id, room_id, {
 
   // STUN ICE servers (optional)
   // If left out, will use public STUN from Google + Twilio
-  stunIceServers: <your STUN servers>,
+  stunIceServers: { ... },
   
   // TURN ICE servers (optional)
   // If left out, will use openrelay public TURN servers from metered.ca
-  turnIceServers: <your TURN servers>,
+  turnIceServers: { ... },
   
   // Network change poll interval (milliseconds, optional, default: 15000, 15 seconds)
   // Interval to poll STUN for network changes + reconnect
