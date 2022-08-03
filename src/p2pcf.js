@@ -205,6 +205,8 @@ export default class P2PCF extends EventEmitter {
     this.lastProcessedReceivedDataTimestamps = new Map()
     this.packageReceivedFromPeers = new Set()
     this.startedAtTimestamp = null
+    this.peerOptions = options.rtcPeerConnectionOptions || {}
+    this.peerSdpTransform = options.sdpTransform || ((sdp) => sdp)
 
     this.workerUrl = options.workerUrl || 'https://p2pcf.minddrop.workers.dev'
 
@@ -494,7 +496,7 @@ export default class P2PCF extends EventEmitter {
       const delaySetRemoteUntilReceiveCandidates = isFirefox
       const remotePackage = remotePackages.find(p => p[1] === remoteSessionId)
 
-      const peerOptions = { iceServers }
+      const peerOptions = { ...this.peerOptions, iceServers }
 
       if (localDtlsCert) {
         peerOptions.certificates = [localDtlsCert]
@@ -548,7 +550,7 @@ export default class P2PCF extends EventEmitter {
               }
             }
 
-            return lines.join('\r\n')
+            return this.peerSdpTransform(lines.join('\r\n'))
           }
         })
 
@@ -626,7 +628,8 @@ export default class P2PCF extends EventEmitter {
           const peer = new Peer({
             config: peerOptions,
             iceCompleteTimeout: 3000,
-            initiator: true
+            initiator: true,
+            sdpTransform: this.peerSdpTransform
           })
 
           peer.id = remoteSessionId
