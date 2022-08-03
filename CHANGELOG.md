@@ -1,3 +1,8 @@
+1.3.1
+-----
+
+Add ability to pass options to RTCPeerConnection and custom sdp transformer.
+
 1.3.0
 -----
 
