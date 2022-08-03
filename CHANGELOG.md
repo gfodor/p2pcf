@@ -1,3 +1,9 @@
+1.3.0
+-----
+
+No longer forcibly close peers when network settings change. Clear packages
+upon connection instead.
+
 1.2.0
 -----
 
