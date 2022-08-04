@@ -78,6 +78,8 @@ const randomstring = len => {
   return btoa(str).replaceAll('=', '')
 }
 
+const textToArr = new TextDecoder('utf-8').decode
+const arrToText = new TextEncoder().encode
 const removeInPlace = (a, condition) => {
   let i = 0; let j = 0
 
@@ -280,7 +282,7 @@ export default class P2PCF extends EventEmitter {
       slowPollingRateMs
     } = this
 
-    const now = new Date().getTime()
+    const now = Date.now()
 
     if (finish) {
       if (this.finished) return
@@ -456,7 +458,7 @@ export default class P2PCF extends EventEmitter {
     } = this
     const [localSessionId, , localSymmetric] = localPeerData
 
-    const now = new Date().getTime()
+    const now = Date.now()
 
     for (const remotePeerData of remotePeerDatas) {
       const [
@@ -774,7 +776,7 @@ export default class P2PCF extends EventEmitter {
    * Connect to network and start discovering peers
    */
   async start () {
-    this.startedAtTimestamp = new Date().getTime()
+    this.startedAtTimestamp = Date.now()
     await this._init()
 
     const [
@@ -1098,7 +1100,7 @@ export default class P2PCF extends EventEmitter {
 
     const u8 = new Uint8Array(msg, SIGNAL_MESSAGE_HEADER_WORDS.length * 2)
 
-    let payload = new TextDecoder('utf-8').decode(u8)
+    let payload = arrToText(u8)
 
     // Might have a trailing byte
     if (payload.endsWith('\0')) {
@@ -1156,7 +1158,7 @@ export default class P2PCF extends EventEmitter {
     // Once ICE completes, perform subsequent signalling via the datachannel
     peer.once('_iceComplete', () => {
       peer.on('signal', signalData => {
-        const payloadBytes = new TextEncoder().encode(
+        const payloadBytes = textToArr(
           JSON.stringify(signalData)
         )
 
