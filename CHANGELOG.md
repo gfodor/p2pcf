@@ -1,6 +1,12 @@
+1.3.5
+-----
+
+Optimizations.
+
 1.3.4
 -----
-Optimizations
+
+Bump tiny-simple-peer, which passes RTCRtpReceiver along events.
 
 1.3.3
 -----
