@@ -78,8 +78,12 @@ const randomstring = len => {
   return btoa(str).replaceAll('=', '')
 }
 
-const textToArr = new TextDecoder('utf-8').decode
-const arrToText = new TextEncoder().encode
+const textDecoder = new TextDecoder('utf-8')
+const textEncoder = new TextEncoder()
+
+const arrToText = textDecoder.decode.bind(textDecoder)
+const textToArr = textEncoder.encode.bind(textEncoder)
+
 const removeInPlace = (a, condition) => {
   let i = 0; let j = 0
 

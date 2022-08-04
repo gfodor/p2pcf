@@ -1774,13 +1774,11 @@ var require_tiny_simple_peer = __commonJS({
       _onTrack(event) {
         if (this.destroyed)
           return;
-        event.streams.forEach((eventStream) => {
+        const { track, receiver, streams } = event;
+        streams.forEach((eventStream) => {
           this._debug("on track");
-          this.emit("track", event.track, eventStream);
-          this._remoteTracks.push({
-            track: event.track,
-            stream: eventStream
-          });
+          this.emit("track", track, eventStream, receiver);
+          this._remoteTracks.push({ track, stream: eventStream });
           if (this._remoteStreams.some((remoteStream) => {
             return remoteStream.id === eventStream.id;
           }))
@@ -1788,7 +1786,7 @@ var require_tiny_simple_peer = __commonJS({
           this._remoteStreams.push(eventStream);
           queueMicrotask2(() => {
             this._debug("on stream");
-            this.emit("stream", eventStream);
+            this.emit("stream", eventStream, receiver);
           });
         });
       }
@@ -1974,6 +1972,10 @@ var randomstring = (len) => {
   const str = bytes.reduce((accum, v) => accum + String.fromCharCode(v), "");
   return btoa(str).replaceAll("=", "");
 };
+var textDecoder = new TextDecoder("utf-8");
+var textEncoder = new TextEncoder();
+var arrToText = textDecoder.decode.bind(textDecoder);
+var textToArr = textEncoder.encode.bind(textEncoder);
 var removeInPlace = (a, condition) => {
   let i = 0;
   let j = 0;
@@ -2140,7 +2142,7 @@ var P2PCF = class extends import_events.default {
       fastPollingRateMs,
       slowPollingRateMs
     } = this;
-    const now = new Date().getTime();
+    const now = Date.now();
     if (finish) {
       if (this.finished)
         return;
@@ -2267,7 +2269,7 @@ var P2PCF = class extends import_events.default {
       turnIceServers
     } = this;
     const [localSessionId, , localSymmetric] = localPeerData;
-    const now = new Date().getTime();
+    const now = Date.now();
     for (const remotePeerData of remotePeerDatas) {
       const [
         remoteSessionId,
@@ -2489,7 +2491,7 @@ var P2PCF = class extends import_events.default {
     }
   }
   async start() {
-    this.startedAtTimestamp = new Date().getTime();
+    this.startedAtTimestamp = Date.now();
     await this._init();
     const [
       udpEnabled,
@@ -2712,7 +2714,7 @@ var P2PCF = class extends import_events.default {
       }
     }
     const u8 = new Uint8Array(msg, SIGNAL_MESSAGE_HEADER_WORDS.length * 2);
-    let payload = new TextDecoder("utf-8").decode(u8);
+    let payload = arrToText(u8);
     if (payload.endsWith("\0")) {
       payload = payload.substring(0, payload.length - 1);
     }
@@ -2758,7 +2760,7 @@ var P2PCF = class extends import_events.default {
     });
     peer.once("_iceComplete", () => {
       peer.on("signal", (signalData) => {
-        const payloadBytes = new TextEncoder().encode(
+        const payloadBytes = textToArr(
           JSON.stringify(signalData)
         );
         let len = payloadBytes.byteLength + SIGNAL_MESSAGE_HEADER_WORDS.length * 2;
