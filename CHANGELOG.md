@@ -1,3 +1,8 @@
+1.3.6
+-----
+
+Fix leaking intervals when rapidly creating + destroying.
+
 1.3.5
 -----
 
