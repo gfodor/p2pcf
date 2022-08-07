@@ -790,6 +790,8 @@ export default class P2PCF extends EventEmitter {
       dtlsFingerprint
     ] = await this._getNetworkSettings(this.dtlsCert)
 
+    if (this.finished) return
+
     this.udpEnabled = udpEnabled
     this.isSymmetric = isSymmetric
     this.reflexiveIps = reflexiveIps
