@@ -772,7 +772,7 @@ export default class P2PCF extends EventEmitter {
     // TODO deal with simple peer
     for (const [sessionId, peer] of peers.entries()) {
       if (remoteSessionIds.includes(sessionId)) continue
-      this._removePeer(peer, true)
+      // this._removePeer(peer, true)
     }
   }
 
