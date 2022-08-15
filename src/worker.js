@@ -146,7 +146,7 @@ async function handleGet (request, env) {
   const hasStore = !!getStore(env)
 
   return new Response(
-    `<html><body style="font-size: 24px; padding: 18px; font-family: Arial, sans-serif"">Hello from P2PCF<br/><div style=\"line-height: 28px; margin-top: 8px; font-size: 0.8em\">${
+    `<html><body style="font-size: 24px; padding: 18px; font-family: Arial, sans-serif"">Hello from P2PCF<br/><div style="line-height: 28px; margin-top: 8px; font-size: 0.8em">${
       hasStore
         ? '&#128077; R2 bucket is configured properly, ready to serve.'
         : '&#10060; Couldn\'t find a configured R2 bucket.<br/>Make sure you <a href="https://github.com/gfodor/p2pcf/blob/master/INSTALL.md#set-up-the-r2-bucket" target="_blank">created a bucket</a> and <a href="https://github.com/gfodor/p2pcf/blob/master/INSTALL.md#bind-the-worker-to-r2" target="_blank">connected the worker to it</a>.'
@@ -492,7 +492,7 @@ async function handlePost (request, env, context) {
   ) {
     // Add a random delay and re-check to avoid stampede.
     context.waitUntil(
-      new Promise(res => {
+      new Promise(resolve => {
         setTimeout(async () => {
           const now = new Date().getTime()
           const nextVacuumEntry = await store.get(`rooms/${roomId}/next_vacuum`)
@@ -537,7 +537,7 @@ async function handlePost (request, env, context) {
             )
           }
 
-          res()
+          resolve()
         }, Math.floor(Math.random() * 10 * 1000))
       })
     )
@@ -610,10 +610,11 @@ export default {
       return handleOptions(request, env, context)
     }
 
-    if (request.headers.get('content-type') !== 'application/json')
+    if (request.headers.get('content-type') !== 'application/json') {
       return new Response('Expected content-type application/json', {
         status: 400
       })
+    }
 
     if (
       request.headers.get('x-worker-method') === 'DELETE' ||

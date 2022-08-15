@@ -765,15 +765,6 @@ export default class P2PCF extends EventEmitter {
         }
       }
     }
-
-    const remoteSessionIds = remotePeerDatas.map(p => p[0])
-
-    // Remove all peers no longer in the peer list.
-    // TODO deal with simple peer
-    for (const [sessionId, peer] of peers.entries()) {
-      if (remoteSessionIds.includes(sessionId)) continue
-      // this._removePeer(peer, true)
-    }
   }
 
   /**
