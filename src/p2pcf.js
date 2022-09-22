@@ -826,7 +826,7 @@ export default class P2PCF extends EventEmitter {
     this.stepInterval = setInterval(this._step, 500)
     this.destroyOnUnload = () => this.destroy()
 
-    for (const ev of iOSSafari ? ['pagehide'] : ['beforeunload', 'unload']) {
+    for (const ev of iOSSafari ? ['pagehide'] : ['unload']) {
       window.addEventListener(ev, this.destroyOnUnload)
     }
   }
