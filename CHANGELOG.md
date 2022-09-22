@@ -1,3 +1,8 @@
+1.3.7
+-----
+
+Remove beforeunload handler since that prevents cancellation of navigation.
+
 1.3.6
 -----
 
