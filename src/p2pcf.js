@@ -16,6 +16,8 @@ import {
 import { hexToBytes } from 'convert-hex'
 import arrayBufferToHex from 'array-buffer-to-hex'
 
+const CONNECT_TIMEOUT = 15000
+
 // Based on Chrome
 const MAX_MESSAGE_LENGTH_BYTES = 16000
 
@@ -543,7 +545,7 @@ export default class P2PCF extends EventEmitter {
         const peer = new Peer({
           config: peerOptions,
           initiator: false,
-          iceCompleteTimeout: 3000,
+          iceCompleteTimeout: Infinity,
           proprietaryConstraints: this.peerProprietaryConstraints,
           sdpTransform: sdp => {
             const lines = []
@@ -601,6 +603,15 @@ export default class P2PCF extends EventEmitter {
 
         peer.once('_iceComplete', finishIce)
 
+        setTimeout(() => {
+          if (peer._iceComplete || peer.connected) return
+
+          console.warn("Peer A didn't connect in time", peer.id)
+          peer._iceComplete = true
+          this._removePeer(peer, true)
+          this._updateConnectedSessions()
+        }, CONNECT_TIMEOUT)
+
         const remoteSdp = createSdp(
           true,
           remoteIceUFrag,
@@ -636,7 +647,7 @@ export default class P2PCF extends EventEmitter {
           const peer = new Peer({
             config: peerOptions,
             proprietaryConstraints: this.rtcPeerConnectionProprietaryConstraints,
-            iceCompleteTimeout: 3000,
+            iceCompleteTimeout: Infinity,
             initiator: true,
             sdpTransform: this.peerSdpTransform
           })
@@ -681,6 +692,15 @@ export default class P2PCF extends EventEmitter {
           }
 
           peer.once('_iceComplete', finishIce)
+
+          setTimeout(() => {
+            if (peer._iceComplete || peer.connected) return
+
+            console.warn('Peer B failed to connect in time', peer.id)
+            peer._iceComplete = true
+            this._removePeer(peer, true)
+            this._updateConnectedSessions()
+          }, CONNECT_TIMEOUT)
 
           const enqueuePackageFromOffer = e => {
             if (e.type !== 'offer') return
@@ -768,11 +788,14 @@ export default class P2PCF extends EventEmitter {
 
     const remoteSessionIds = remotePeerDatas.map(p => p[0])
 
-    // Remove all peers no longer in the peer list.
-    // TODO deal with simple peer
+    // Remove all disconnected peers no longer in the peer list.
     for (const [sessionId, peer] of peers.entries()) {
       if (remoteSessionIds.includes(sessionId)) continue
-      this._removePeer(peer, true)
+
+      if (!peer.connected) {
+        console.warn('Removing unconnected peer not in peer list', peer.id)
+        this._removePeer(peer, true)
+      }
     }
   }
 
@@ -854,82 +877,76 @@ export default class P2PCF extends EventEmitter {
    * @param integer msgID ID of message if it's a response to a previous message
    */
   send (peer, msg) {
-    return new Promise((resolve, reject) => {
-      // if leading byte is zero
-      //   next two bytes is message id, then remaining bytes
-      // otherwise its just raw
-      let dataArrBuffer = null
+    if (!peer.connected) return
 
-      let messageId = null
+    // if leading byte is zero
+    //   next two bytes is message id, then remaining bytes
+    // otherwise its just raw
+    let dataArrBuffer = null
 
-      if (msg instanceof ArrayBuffer) {
-        dataArrBuffer = msg
-      } else if (msg instanceof Uint8Array) {
-        if (msg.buffer.byteLength === msg.length) {
-          dataArrBuffer = msg.buffer
-        } else {
-          dataArrBuffer = msg.buffer.slice(msg.byteOffset, msg.byteOffset + msg.byteLength)
-        }
+    let messageId = null
+
+    if (msg instanceof ArrayBuffer) {
+      dataArrBuffer = msg
+    } else if (msg instanceof Uint8Array) {
+      if (msg.buffer.byteLength === msg.length) {
+        dataArrBuffer = msg.buffer
       } else {
-        throw new Error('Unsupported send data type', msg)
+        dataArrBuffer = msg.buffer.slice(msg.byteOffset, msg.byteOffset + msg.byteLength)
       }
+    } else {
+      throw new Error('Unsupported send data type', msg)
+    }
 
-      // If the magic word happens to be the beginning of this message, chunk it
-      if (
-        dataArrBuffer.byteLength > MAX_MESSAGE_LENGTH_BYTES ||
-        new Uint16Array(dataArrBuffer, 0, 1) === CHUNK_MAGIC_WORD
+    // If the magic word happens to be the beginning of this message, chunk it
+    if (
+      dataArrBuffer.byteLength > MAX_MESSAGE_LENGTH_BYTES ||
+      new Uint16Array(dataArrBuffer, 0, 1) === CHUNK_MAGIC_WORD
+    ) {
+      messageId = Math.floor(Math.random() * 256 * 128)
+    }
+
+    if (messageId !== null) {
+      for (
+        let offset = 0, chunkId = 0;
+        offset < dataArrBuffer.byteLength;
+        offset += CHUNK_MAX_LENGTH_BYTES, chunkId++
       ) {
-        messageId = Math.floor(Math.random() * 256 * 128)
-      }
+        const chunkSize = Math.min(
+          CHUNK_MAX_LENGTH_BYTES,
+          dataArrBuffer.byteLength - offset
+        )
+        let bufSize = CHUNK_HEADER_LENGTH_BYTES + chunkSize
 
-      if (messageId !== null) {
-        for (
-          let offset = 0, chunkId = 0;
-          offset < dataArrBuffer.byteLength;
-          offset += CHUNK_MAX_LENGTH_BYTES, chunkId++
-        ) {
-          const chunkSize = Math.min(
-            CHUNK_MAX_LENGTH_BYTES,
-            dataArrBuffer.byteLength - offset
-          )
-          let bufSize = CHUNK_HEADER_LENGTH_BYTES + chunkSize
-
-          while (bufSize % 4 !== 0) {
-            bufSize++
-          }
-
-          const buf = new ArrayBuffer(bufSize)
-          new Uint8Array(buf, CHUNK_HEADER_LENGTH_BYTES).set(
-            new Uint8Array(dataArrBuffer, offset, chunkSize)
-          )
-          const u16 = new Uint16Array(buf)
-          const u32 = new Uint32Array(buf)
-
-          u16[0] = CHUNK_MAGIC_WORD
-          u16[1] = messageId
-          u16[2] = chunkId
-          u16[3] =
-            offset + CHUNK_MAX_LENGTH_BYTES >= dataArrBuffer.byteLength ? 1 : 0
-          u32[2] = dataArrBuffer.byteLength
-
-          peer.send(buf)
+        while (bufSize % 4 !== 0) {
+          bufSize++
         }
-      } else {
-        peer.send(dataArrBuffer)
+
+        const buf = new ArrayBuffer(bufSize)
+        new Uint8Array(buf, CHUNK_HEADER_LENGTH_BYTES).set(
+          new Uint8Array(dataArrBuffer, offset, chunkSize)
+        )
+        const u16 = new Uint16Array(buf)
+        const u32 = new Uint32Array(buf)
+
+        u16[0] = CHUNK_MAGIC_WORD
+        u16[1] = messageId
+        u16[2] = chunkId
+        u16[3] =
+          offset + CHUNK_MAX_LENGTH_BYTES >= dataArrBuffer.byteLength ? 1 : 0
+        u32[2] = dataArrBuffer.byteLength
+
+        peer.send(buf)
       }
-    })
+    } else {
+      peer.send(dataArrBuffer)
+    }
   }
 
   broadcast (msg) {
-    const ps = []
-
     for (const peer of this.peers.values()) {
-      if (!peer.connected) continue
-
-      ps.push(this.send(peer, msg))
+      this.send(peer, msg)
     }
-
-    return Promise.all(ps)
   }
 
   /**
