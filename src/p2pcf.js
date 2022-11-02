@@ -1179,32 +1179,30 @@ export default class P2PCF extends EventEmitter {
     })
 
     // Once ICE completes, perform subsequent signalling via the datachannel
-    peer.once('_iceComplete', () => {
-      peer.on('signal', signalData => {
-        const payloadBytes = textToArr(
-          JSON.stringify(signalData)
-        )
+    peer.on('signal', signalData => {
+      const payloadBytes = textToArr(
+        JSON.stringify(signalData)
+      )
 
-        let len =
-          payloadBytes.byteLength + SIGNAL_MESSAGE_HEADER_WORDS.length * 2
+      let len =
+        payloadBytes.byteLength + SIGNAL_MESSAGE_HEADER_WORDS.length * 2
 
-        if (len % 2 !== 0) {
-          len++
-        }
+      if (len % 2 !== 0) {
+        len++
+      }
 
-        // Add signal header
-        const buf = new ArrayBuffer(len)
-        const u8 = new Uint8Array(buf)
-        const u16 = new Uint16Array(buf)
+      // Add signal header
+      const buf = new ArrayBuffer(len)
+      const u8 = new Uint8Array(buf)
+      const u16 = new Uint16Array(buf)
 
-        u8.set(payloadBytes, SIGNAL_MESSAGE_HEADER_WORDS.length * 2)
+      u8.set(payloadBytes, SIGNAL_MESSAGE_HEADER_WORDS.length * 2)
 
-        for (let i = 0; i < SIGNAL_MESSAGE_HEADER_WORDS.length; i++) {
-          u16[i] = SIGNAL_MESSAGE_HEADER_WORDS[i]
-        }
+      for (let i = 0; i < SIGNAL_MESSAGE_HEADER_WORDS.length; i++) {
+        u16[i] = SIGNAL_MESSAGE_HEADER_WORDS[i]
+      }
 
-        this.send(peer, buf)
-      })
+      this.send(peer, buf)
     })
   }
 }
