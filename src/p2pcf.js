@@ -1035,7 +1035,7 @@ export default class P2PCF extends EventEmitter {
     }
 
     const pc = new this.wrtc.RTCPeerConnection(peerOptions)
-    pc.createDataChannel('x')
+    const dc = pc.createDataChannel('x')
 
     const p = new Promise(resolve => {
       setTimeout(() => resolve(), 5000)
@@ -1060,6 +1060,7 @@ export default class P2PCF extends EventEmitter {
 
     await p
 
+    dc.close()
     pc.close()
 
     let isSymmetric = false
