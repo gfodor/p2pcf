@@ -1,6 +1,6 @@
 {
   "name": "p2pcf",
-  "version": "1.3.9",
+  "version": "1.3.10",
   "description": "WebRTC signalling using Cloudflare Workers",
   "main": "src/p2pcf.js",
   "scripts": {
