@@ -21,6 +21,9 @@ const CONNECT_TIMEOUT = 15000
 // Based on Chrome
 const MAX_MESSAGE_LENGTH_BYTES = 16000
 
+// Custom timeout routine to end trickle ice early
+const TRICKLE_ICE_TIMEOUT = 3000
+
 const CHUNK_HEADER_LENGTH_BYTES = 12 // 2 magic, 2 msg id, 2 chunk id, 2 for done bit, 4 for length
 const CHUNK_MAGIC_WORD = 8121
 const CHUNK_MAX_LENGTH_BYTES =
@@ -586,12 +589,7 @@ export default class P2PCF extends EventEmitter {
 
         const pkgCandidates = pkg[pkg.length - 1]
 
-        const initialCandidateSignalling = e => {
-          if (!e.candidate?.candidate) return
-          pkgCandidates.push(e.candidate.candidate)
-        }
-
-        peer.on('signal', initialCandidateSignalling)
+        let finishIceTimeout = null
 
         const finishIce = () => {
           peer.removeListener('signal', initialCandidateSignalling)
@@ -601,7 +599,20 @@ export default class P2PCF extends EventEmitter {
           localPackages.push(pkg)
         }
 
-        peer.once('_iceComplete', finishIce)
+        const initialCandidateSignalling = e => {
+          if (!e.candidate) return
+
+          clearTimeout(finishIceTimeout)
+
+          if (e.candidate.candidate) {
+            pkgCandidates.push(e.candidate.candidate)
+            finishIceTimeout = setTimeout(finishIce, TRICKLE_ICE_TIMEOUT)
+          } else {
+            finishIce()
+          }
+        }
+
+        peer.on('signal', initialCandidateSignalling)
 
         setTimeout(() => {
           if (peer._iceComplete || peer.connected) return
@@ -674,13 +685,7 @@ export default class P2PCF extends EventEmitter {
 
           const pkgCandidates = pkg[pkg.length - 1]
 
-          const initialCandidateSignalling = e => {
-            // Push package onto the given package list, so it will be sent in next polling step.
-            if (!e.candidate?.candidate) return
-            pkgCandidates.push(e.candidate.candidate)
-          }
-
-          peer.on('signal', initialCandidateSignalling)
+          let finishIceTimeout = null
 
           const finishIce = () => {
             peer.removeListener('signal', initialCandidateSignalling)
@@ -691,7 +696,20 @@ export default class P2PCF extends EventEmitter {
             localPackages.push(pkg)
           }
 
-          peer.once('_iceComplete', finishIce)
+          const initialCandidateSignalling = e => {
+            if (!e.candidate) return
+            clearTimeout(finishIceTimeout)
+
+            // Push package onto the given package list, so it will be sent in next polling step.
+            if (e.candidate.candidate) {
+              pkgCandidates.push(e.candidate.candidate)
+              finishIceTimeout = setTimeout(finishIce, TRICKLE_ICE_TIMEOUT)
+            } else {
+              finishIce()
+            }
+          }
+
+          peer.on('signal', initialCandidateSignalling)
 
           setTimeout(() => {
             if (peer._iceComplete || peer.connected) return
