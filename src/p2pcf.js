@@ -202,6 +202,8 @@ export default class P2PCF extends EventEmitter {
       throw new Error('Room ID must be at least four characters')
     }
 
+    const now = Date.now()
+
     this._step = this._step.bind(this)
 
     this.peers = new Map()
@@ -254,8 +256,8 @@ export default class P2PCF extends EventEmitter {
     this.nextStepTime = -1
     this.deleteKey = null
     this.sentFirstPoll = false
-    this.stopFastPollingAt = performance.now() + this.fastPollingDurationMs
-    this.startIdlePollingAt = performance.now() + this.idlePollingAfterMs
+    this.stopFastPollingAt = now + this.fastPollingDurationMs
+    this.startIdlePollingAt = now + this.idlePollingAfterMs
 
     // ContextID is maintained across page refreshes
     if (!window.history.state?._p2pcfContextId) {
