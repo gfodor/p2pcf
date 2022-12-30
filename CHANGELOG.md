@@ -1,3 +1,8 @@
+1.3.12
+------
+Added additional polling rate to make it possible to disable polling after
+sufficient idle time. Changed some default polling rates to be more conservative.
+
 1.3.7
 -----
 

@@ -236,8 +236,10 @@ export default class P2PCF extends EventEmitter {
     this.stateHeartbeatWindowMs = options.stateHeartbeatWindowMs || 30000
 
     this.fastPollingDurationMs = options.fastPollingDurationMs || 10000
-    this.fastPollingRateMs = options.fastPollingRateMs || 750
-    this.slowPollingRateMs = options.slowPollingRateMs || 1500
+    this.fastPollingRateMs = options.fastPollingRateMs || 1500
+    this.slowPollingRateMs = options.slowPollingRateMs || 5000
+    this.idlePollingAfterMs = options.idlePollingAfterMs || Infinity
+    this.idlePollingRateMs = options.idlePollingRateMs || Infinity
 
     this.wrtc = getBrowserRTC()
     this.dtlsCert = null
@@ -252,7 +254,8 @@ export default class P2PCF extends EventEmitter {
     this.nextStepTime = -1
     this.deleteKey = null
     this.sentFirstPoll = false
-    this.stopFastPollingAt = -1
+    this.stopFastPollingAt = performance.now() + this.fastPollingDurationMs
+    this.startIdlePollingAt = performance.now() + this.idlePollingAfterMs
 
     // ContextID is maintained across page refreshes
     if (!window.history.state?._p2pcfContextId) {
@@ -288,7 +291,9 @@ export default class P2PCF extends EventEmitter {
       packages,
       fastPollingDurationMs,
       fastPollingRateMs,
-      slowPollingRateMs
+      slowPollingRateMs,
+      idlePollingAfterMs,
+      idlePollingRateMs
     } = this
 
     const now = Date.now()
@@ -433,10 +438,13 @@ export default class P2PCF extends EventEmitter {
       // Go faster when things are changing to avoid ICE timeouts
       if (peersChanged) {
         this.stopFastPollingAt = now + fastPollingDurationMs
+        this.startIdlePollingAt = now + idlePollingAfterMs
       }
 
       if (now < this.stopFastPollingAt) {
         this.nextStepTime = now + fastPollingRateMs
+      } else if (now > this.startIdlePollingAt) {
+        this.nextStepTime = now + idlePollingRateMs
       } else {
         this.nextStepTime = now + slowPollingRateMs
       }

@@ -55,13 +55,26 @@ const p2pcf = new P2PCF(client_id, room_id, {
   // Time before expiration to heartbeat
   stateHeartbeatWindowMs: ...,
   
-  // Fast polling rate (milliseconds, optional, default: 750)
+  // Fast polling duration (milliseconds, optional, default: 10000, 10 seconds)
+  // How long we run fast polling after a state transition
+  fastPollingDurationMs: ...,
+
+  // Fast polling rate (milliseconds, optional, default: 1500)
   // Polling rate during state transitions
   fastPollingRateMs: ...,
-  
-  // Slow polling rate (milliseconds, optional, default: 1500, 1.5 seconds)
-  // Polling rate when state is idle
+
+  // Slow polling rate (milliseconds, optional, default: 5000, 1.5 seconds)
+  // Polling rate when there has been no recent activity
   slowPollingRateMs: ...,
+
+  // Idle polling delay (milliseconds, optional, default: never)
+  // How long to wait for activity before switching to idle polling rate
+  idlePollingAfterMs: ...,
+
+  // Idle polling rate (milliseconds, optional, default: Infinity)
+  // Polling rate when there has been no activity for idlePollingAfterMs milliseconds
+  // Infinity will cause polling to stop, which is useful for idle clients left open.
+  idlePollingAfterMs: ...,
 
   // Options to pass to RTCPeerConnection constructor (optional)
   rtcPeerConnectionOptions: {},
