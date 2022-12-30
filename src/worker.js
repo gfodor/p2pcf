@@ -153,7 +153,7 @@ async function handleGet (request, env) {
     }</div></body></html>`,
     {
       headers: {
-        'Content-Type': 'text.html'
+        'Content-Type': 'text/html'
       }
     }
   )
