@@ -1,3 +1,7 @@
+1.3.13
+------
+Change import and bump tiny-simple-peer to deal with import errors with bun.
+
 1.3.12
 ------
 Added additional polling rate to make it possible to disable polling after

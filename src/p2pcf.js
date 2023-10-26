@@ -7,7 +7,7 @@
 /* global crypto */
 
 import getBrowserRTC from 'get-browser-rtc'
-import EventEmitter from 'events'
+import { EventEmitter } from 'events'
 import Peer from 'tiny-simple-peer'
 import {
   encode as arrayBufferToBase64,

@@ -15,7 +15,7 @@
     "convert-hex": "^0.1.0",
     "events": "^3.3.0",
     "get-browser-rtc": "^1.1.0",
-    "tiny-simple-peer": "^10.1.1"
+    "tiny-simple-peer": "^10.1.2"
   },
   "devDependencies": {
     "airtap": "^4.0.4",
