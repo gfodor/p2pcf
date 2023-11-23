@@ -18,7 +18,7 @@
   "module": "./dist/esm/p2pcf.js",
   "sideEffects": false,
   "scripts": {
-    "build:esm": "esbuild src/p2pcf.js --define:global=window --format=esm --bundle --outfile=dist/esm/p2pcf.js",
+    "build:esm": "esbuild src/p2pcf.js --define:global=window --format=esm --bundle --outfile=dist/esm/p2pcf.js && echo '{ \"type\": \"module\", \"sideEffects\": false }' > dist/esm/package.json",
     "build:cjs": "esbuild src/p2pcf.js --define:global=window --format=cjs --bundle --outfile=dist/cjs/p2pcf.js",
     "build:min": "esbuild src/p2pcf.js --minify --define:global=window --bundle --outfile=dist/p2pcf.min.js",
     "build": "rimraf -rf ./dist/ && npm run build:esm && npm run build:cjs && npm run build:min",
