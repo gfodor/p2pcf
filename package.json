@@ -5,10 +5,23 @@
     "node": ">=12.0.0"
   },
   "description": "WebRTC signalling using Cloudflare Workers",
-  "main": "src/p2pcf.js",
+  "exports": {
+    ".": {
+      "default": {
+        "import": "./dist/esm/p2pcf.js",
+        "default": "./dist/cjs/p2pcf.js"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "main": "./dist/cjs/p2pcf.js",
+  "module": "./dist/esm/p2pcf.js",
+  "sideEffects": false,
   "scripts": {
-    "build": "esbuild src/p2pcf.js --define:global=window --format=esm --bundle --outfile=dist/p2pcf.js",
+    "build:esm": "esbuild src/p2pcf.js --define:global=window --format=esm --bundle --outfile=dist/esm/p2pcf.js && echo '{ \"type\": \"module\", \"sideEffects\": false }' > dist/esm/package.json",
+    "build:cjs": "esbuild src/p2pcf.js --define:global=window --format=cjs --bundle --outfile=dist/cjs/p2pcf.js",
     "build:min": "esbuild src/p2pcf.js --minify --define:global=window --bundle --outfile=dist/p2pcf.min.js",
+    "build": "rimraf -rf ./dist/ && npm run build:esm && npm run build:cjs && npm run build:min",
     "test": "echo \"No tests.\"",
     "start:worker": "wrangler dev"
   },
@@ -27,6 +40,7 @@
     "lint-staged": "^12.3.7",
     "prettier": "^2.7.1",
     "prettier-standard": "^15.0.1",
+    "rimraf": "5.0.5",
     "standard": "^17.0.0",
     "start-server-and-test": "^1.14.0",
     "tape": "^5.5.3",
